@@ -11,6 +11,8 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 
+#define BAYE_GAME_TASK_STACK_BYTES 16384
+
 static const char *TAG = "baye_main";
 static TaskHandle_t s_game_task_handle = NULL;
 
@@ -21,13 +23,14 @@ void baye_log_telemetry(const char *phase_label) {
     uint32_t free_heap = esp_get_free_heap_size();
     uint32_t min_heap  = esp_get_minimum_free_heap_size();
     uint32_t max_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    UBaseType_t stack_wm = s_game_task_handle ? uxTaskGetStackHighWaterMark(s_game_task_handle) : 0;
+    UBaseType_t stack_hwm_bytes = s_game_task_handle ? uxTaskGetStackHighWaterMark(s_game_task_handle) : 0;
 
     ESP_LOGI(TAG, "=== RAM TELEMETRY [%s] ===", phase_label ? phase_label : "CHECK");
     ESP_LOGI(TAG, "  Free Heap:       %u bytes (%u KB)", (unsigned)free_heap, (unsigned)(free_heap / 1024));
     ESP_LOGI(TAG, "  Min Free Heap:   %u bytes (%u KB)", (unsigned)min_heap, (unsigned)(min_heap / 1024));
     ESP_LOGI(TAG, "  Largest Block:   %u bytes (%u KB)", (unsigned)max_block, (unsigned)(max_block / 1024));
-    ESP_LOGI(TAG, "  Task Stack HWM:  %u words (%u bytes free)", (unsigned)stack_wm, (unsigned)(stack_wm * sizeof(StackType_t)));
+    ESP_LOGI(TAG, "  Task Config Stk: %u bytes (%u KB)", (unsigned)BAYE_GAME_TASK_STACK_BYTES, (unsigned)(BAYE_GAME_TASK_STACK_BYTES / 1024));
+    ESP_LOGI(TAG, "  Task Stack HWM:  %u bytes free", (unsigned)stack_hwm_bytes);
     ESP_LOGI(TAG, "  Battle RAM Gate: %p (65536 bytes / 64 KB contiguous SRAM)", (void *)g_FightMapData);
     ESP_LOGI(TAG, "================================");
     passport_display_log_perf();
@@ -54,11 +57,11 @@ static void baye_game_task(void *arg) {
 }
 
 esp_err_t baye_game_start(void) {
-    // 16 KB stack for game core
+    // 16 KiB stack for game core (ESP-IDF xTaskCreate takes bytes)
     BaseType_t ret = xTaskCreate(
         baye_game_task,
         "baye_game",
-        16384 / sizeof(StackType_t),
+        BAYE_GAME_TASK_STACK_BYTES,
         NULL,
         5,
         &s_game_task_handle
@@ -69,7 +72,7 @@ esp_err_t baye_game_start(void) {
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "baye_game task created successfully");
+    ESP_LOGI(TAG, "baye_game task created successfully (stack: %u bytes)", (unsigned)BAYE_GAME_TASK_STACK_BYTES);
     return ESP_OK;
 }
 #else

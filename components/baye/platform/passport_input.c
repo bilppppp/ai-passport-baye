@@ -102,7 +102,7 @@ void passport_input_init(void) {
     } else {
         ESP_LOGE(TAG, "Failed to initialize buttons: %s", esp_err_to_name(err));
     }
-    xTaskCreate(baye_serial_input_task, "baye_serial_in", 2048 / sizeof(StackType_t), NULL, 3, NULL);
+    xTaskCreate(baye_serial_input_task, "baye_serial_in", 2048, NULL, 3, NULL);
 #else
     ESP_LOGI(TAG, "Host input initialized");
 #endif

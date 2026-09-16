@@ -36,6 +36,7 @@ void passport_display_set_theme(bool retro);
 void passport_display_mark_dirty(int y1, int y2);
 void passport_display_flush(void);
 void passport_display_log_perf(void);
+uint32_t passport_display_get_dma_timeout_count(void);
 
 // Get direct access to the 1bpp framebuffer (for unit tests / inspection)
 uint8_t *passport_display_get_fb(void);

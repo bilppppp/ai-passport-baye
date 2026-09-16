@@ -17,6 +17,22 @@ static int64_t  s_total_full_flush_us = 0;
 static int64_t  s_last_full_flush_us = 0;
 static int64_t  s_min_full_flush_us = 0;
 static int64_t  s_max_full_flush_us = 0;
+static uint32_t s_dma_timeout_count = 0;
+
+static esp_err_t wait_trans_done_fail_closed(int strip_id) {
+    esp_err_t err = bsp_display_wait_trans_done(100);
+    if (err != ESP_OK) {
+        s_dma_timeout_count++;
+        ESP_LOGE(TAG, "Strip %d wait DMA timeout (total timeouts: %u): %s; fail-closed waiting indefinitely...",
+                 strip_id, (unsigned)s_dma_timeout_count, esp_err_to_name(err));
+        err = bsp_display_wait_trans_done(UINT32_MAX);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Strip %d fatal DMA wait failure: %s", strip_id, esp_err_to_name(err));
+            return err;
+        }
+    }
+    return ESP_OK;
+}
 #else
 #define ESP_LOGI(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGW(tag, fmt, ...) printf("[%s] WARN: " fmt "\n", tag, ##__VA_ARGS__)
@@ -125,17 +141,17 @@ void passport_display_init(void) {
         }
         // Top border: y = 0..23 (24 rows = 16 rows + 8 rows)
         esp_lcd_panel_draw_bitmap(panel, 0, 0, PASSPORT_PHYS_W, 16, s_strip_buf);
-        bsp_display_wait_trans_done(100);
+        wait_trans_done_fail_closed(-1);
 
         esp_lcd_panel_draw_bitmap(panel, 0, 16, PASSPORT_PHYS_W, 24, s_strip_buf);
-        bsp_display_wait_trans_done(100);
+        wait_trans_done_fail_closed(-2);
 
         // Bottom border: y = 216..239 (24 rows)
         esp_lcd_panel_draw_bitmap(panel, 0, 216, PASSPORT_PHYS_W, 232, s_strip_buf);
-        bsp_display_wait_trans_done(100);
+        wait_trans_done_fail_closed(-3);
 
         esp_lcd_panel_draw_bitmap(panel, 0, 232, PASSPORT_PHYS_W, 240, s_strip_buf);
-        bsp_display_wait_trans_done(100);
+        wait_trans_done_fail_closed(-4);
     }
 #else
     s_strip_buf = s_strip_buf_static;
@@ -193,10 +209,12 @@ void passport_display_flush(void) {
         int py_end   = py_start + logical_rows_in_strip * BAYE_SCALE;
         esp_lcd_panel_draw_bitmap(panel, 0, py_start, PASSPORT_PHYS_W, py_end, s_strip_buf);
 
-        // Block until DMA transaction completes before modifying s_strip_buf for next strip
-        esp_err_t wait_err = bsp_display_wait_trans_done(100);
+        // Fail-closed: block until DMA transaction completes before modifying s_strip_buf for next strip
+        esp_err_t wait_err = wait_trans_done_fail_closed(strip);
         if (wait_err != ESP_OK) {
-            ESP_LOGW(TAG, "Strip %d wait DMA timeout: %s", strip, esp_err_to_name(wait_err));
+            // Unrecoverable DMA failure; abort flush to preserve buffer integrity
+            s_dirty = false;
+            return;
         }
     }
 
@@ -228,9 +246,18 @@ void passport_display_log_perf(void) {
     ESP_LOGI(TAG, "  Last Full Time: %.2f ms", last_ms);
     ESP_LOGI(TAG, "  Avg Full Time:  %.2f ms (Min: %.2f ms, Max: %.2f ms)", avg_ms, min_ms, max_ms);
     ESP_LOGI(TAG, "  Theoretical FPS:%.1f fps", max_fps);
+    ESP_LOGI(TAG, "  DMA Timeouts:   %u", (unsigned)s_dma_timeout_count);
     ESP_LOGI(TAG, "==========================");
 #else
     printf("[baye_disp] Display perf not tracked on host\n");
+#endif
+}
+
+uint32_t passport_display_get_dma_timeout_count(void) {
+#ifdef ESP_PLATFORM
+    return s_dma_timeout_count;
+#else
+    return 0;
 #endif
 }
 
