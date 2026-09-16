@@ -301,7 +301,10 @@ uint32_t gam_ftell(gam_FILE *fp) {
 }
 
 uint8_t *gam_fload(uint8_t *bptr, uint32_t addr, gam_FILE *fhandle) {
-    (void)fhandle;
+    if (!bptr) return NULL;
+    if (fhandle && addr >= fhandle->flen) {
+        return NULL;
+    }
     return bptr + addr;
 }
 

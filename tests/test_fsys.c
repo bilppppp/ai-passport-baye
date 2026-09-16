@@ -66,6 +66,21 @@ int main(int argc, char **argv) {
     // Test gam_freadall
     uint8_t *all_ptr = gam_freadall(fp);
     assert(all_ptr == dat_buf);
+
+    // Test gam_fload boundary checks
+    assert(gam_fload(dat_buf, 0, fp) == dat_buf);
+    assert(gam_fload(dat_buf, 100, fp) == dat_buf + 100);
+    assert(gam_fload(dat_buf, fp->flen - 1, fp) == dat_buf + fp->flen - 1);
+    assert(gam_fload(dat_buf, fp->flen, fp) == NULL);       // Out of bounds
+    assert(gam_fload(dat_buf, 9999999, fp) == NULL);        // Far out of bounds
+    assert(gam_fload(NULL, 0, fp) == NULL);                 // NULL base pointer
+
+    // Test gam_fseek & gam_fread bounds
+    gam_fseek(fp, 9999999, SEEK_SET);
+    assert(fp->curset == fp->flen);
+    uint8_t dummy[10];
+    assert(gam_fread(dummy, 1, sizeof(dummy), fp) == 0);
+
     gam_fclose(fp);
 
     // 2. Open font.bin

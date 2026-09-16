@@ -62,6 +62,11 @@ static void bsp_button_event_callback(bsp_btn_t btn, bsp_btn_ev_t ev, void *user
     passport_input_on_button(btn, ev);
 }
 
+#ifndef CONFIG_BAYE_DEV_CONSOLE
+#define CONFIG_BAYE_DEV_CONSOLE 1
+#endif
+
+#if CONFIG_BAYE_DEV_CONSOLE
 static void baye_serial_input_task(void *arg) {
     (void)arg;
     while (1) {
@@ -93,6 +98,7 @@ static void baye_serial_input_task(void *arg) {
     }
 }
 #endif
+#endif
 
 void passport_input_init(void) {
 #ifdef ESP_PLATFORM
@@ -102,7 +108,12 @@ void passport_input_init(void) {
     } else {
         ESP_LOGE(TAG, "Failed to initialize buttons: %s", esp_err_to_name(err));
     }
+#if CONFIG_BAYE_DEV_CONSOLE
     xTaskCreate(baye_serial_input_task, "baye_serial_in", 2048, NULL, 3, NULL);
+    ESP_LOGI(TAG, "Serial input console task enabled");
+#else
+    ESP_LOGI(TAG, "Serial input console disabled (release mode)");
+#endif
 #else
     ESP_LOGI(TAG, "Host input initialized");
 #endif

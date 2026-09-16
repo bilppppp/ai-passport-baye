@@ -18,6 +18,7 @@ static int64_t  s_last_full_flush_us = 0;
 static int64_t  s_min_full_flush_us = 0;
 static int64_t  s_max_full_flush_us = 0;
 static uint32_t s_dma_timeout_count = 0;
+static uint32_t s_lcd_submit_fail_count = 0;
 
 static esp_err_t wait_trans_done_fail_closed(int strip_id) {
     esp_err_t err = bsp_display_wait_trans_done(100);
@@ -32,6 +33,19 @@ static esp_err_t wait_trans_done_fail_closed(int strip_id) {
         }
     }
     return ESP_OK;
+}
+
+static esp_err_t draw_bitmap_and_wait(esp_lcd_panel_handle_t panel,
+                                      int x_start, int y_start, int x_end, int y_end,
+                                      const void *color_data, int strip_id) {
+    esp_err_t err = esp_lcd_panel_draw_bitmap(panel, x_start, y_start, x_end, y_end, color_data);
+    if (err != ESP_OK) {
+        s_lcd_submit_fail_count++;
+        ESP_LOGE(TAG, "Strip %d draw_bitmap submit failed (total failures: %u): %s",
+                 strip_id, (unsigned)s_lcd_submit_fail_count, esp_err_to_name(err));
+        return err;
+    }
+    return wait_trans_done_fail_closed(strip_id);
 }
 #else
 #define ESP_LOGI(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
@@ -140,18 +154,12 @@ void passport_display_init(void) {
             s_strip_buf[i] = black_color;
         }
         // Top border: y = 0..23 (24 rows = 16 rows + 8 rows)
-        esp_lcd_panel_draw_bitmap(panel, 0, 0, PASSPORT_PHYS_W, 16, s_strip_buf);
-        wait_trans_done_fail_closed(-1);
-
-        esp_lcd_panel_draw_bitmap(panel, 0, 16, PASSPORT_PHYS_W, 24, s_strip_buf);
-        wait_trans_done_fail_closed(-2);
+        draw_bitmap_and_wait(panel, 0, 0, PASSPORT_PHYS_W, 16, s_strip_buf, -1);
+        draw_bitmap_and_wait(panel, 0, 16, PASSPORT_PHYS_W, 24, s_strip_buf, -2);
 
         // Bottom border: y = 216..239 (24 rows)
-        esp_lcd_panel_draw_bitmap(panel, 0, 216, PASSPORT_PHYS_W, 232, s_strip_buf);
-        wait_trans_done_fail_closed(-3);
-
-        esp_lcd_panel_draw_bitmap(panel, 0, 232, PASSPORT_PHYS_W, 240, s_strip_buf);
-        wait_trans_done_fail_closed(-4);
+        draw_bitmap_and_wait(panel, 0, 216, PASSPORT_PHYS_W, 232, s_strip_buf, -3);
+        draw_bitmap_and_wait(panel, 0, 232, PASSPORT_PHYS_W, 240, s_strip_buf, -4);
     }
 #else
     s_strip_buf = s_strip_buf_static;
@@ -207,12 +215,9 @@ void passport_display_flush(void) {
 
         int py_start = BAYE_OFFSET_Y + ly_start * BAYE_SCALE;
         int py_end   = py_start + logical_rows_in_strip * BAYE_SCALE;
-        esp_lcd_panel_draw_bitmap(panel, 0, py_start, PASSPORT_PHYS_W, py_end, s_strip_buf);
-
-        // Fail-closed: block until DMA transaction completes before modifying s_strip_buf for next strip
-        esp_err_t wait_err = wait_trans_done_fail_closed(strip);
-        if (wait_err != ESP_OK) {
-            // Unrecoverable DMA failure; abort flush to preserve buffer integrity
+        esp_err_t draw_err = draw_bitmap_and_wait(panel, 0, py_start, PASSPORT_PHYS_W, py_end, s_strip_buf, strip);
+        if (draw_err != ESP_OK) {
+            // Unrecoverable LCD submit or DMA failure; abort flush to preserve buffer integrity
             s_dirty = false;
             return;
         }
@@ -247,6 +252,7 @@ void passport_display_log_perf(void) {
     ESP_LOGI(TAG, "  Avg Full Time:  %.2f ms (Min: %.2f ms, Max: %.2f ms)", avg_ms, min_ms, max_ms);
     ESP_LOGI(TAG, "  Theoretical FPS:%.1f fps", max_fps);
     ESP_LOGI(TAG, "  DMA Timeouts:   %u", (unsigned)s_dma_timeout_count);
+    ESP_LOGI(TAG, "  LCD Sub Fails:  %u", (unsigned)s_lcd_submit_fail_count);
     ESP_LOGI(TAG, "==========================");
 #else
     printf("[baye_disp] Display perf not tracked on host\n");
@@ -256,6 +262,14 @@ void passport_display_log_perf(void) {
 uint32_t passport_display_get_dma_timeout_count(void) {
 #ifdef ESP_PLATFORM
     return s_dma_timeout_count;
+#else
+    return 0;
+#endif
+}
+
+uint32_t passport_display_get_lcd_submit_fail_count(void) {
+#ifdef ESP_PLATFORM
+    return s_lcd_submit_fail_count;
 #else
     return 0;
 #endif
