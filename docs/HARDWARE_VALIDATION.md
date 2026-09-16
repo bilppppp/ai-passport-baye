@@ -115,6 +115,40 @@ The V1 implementation of `ai-passport-baye` is **stable, hardened, and verified 
 ### 5.2 Gate B & C — Background Audio (BGM) Verification
 - **Audio Codec:** Everest ES8311 initialized via I2C (`0x18`) and configured for 16,000 Hz, 16-bit, Mono.
 - **Audio Stream:** 16kHz IMA ADPCM retro strategic march (`baye_bgm_16k.adpcm`, 180.3 KB, 23.07 seconds) streaming in 160-byte chunks every 20ms into I2S DMA.
-- **Loop Behavior:** Cursor automatically rewinds at EOF with seamless transition.
-- **RAM Headroom:** Audio worker task allocated 2,560 bytes stack, leaving $> 140\text{ KB}$ free system heap.
+- **Decoder Efficiency:** Pure C IMA ADPCM state requires only 4 bytes of RAM, decoding 160-byte ADPCM chunks into 640-byte PCM in $< 35\ \mu\text{s}$ ($< 0.2\%$ CPU at 160MHz).
+- **Loop Timing:** Cycle duration observed on hardware: exactly 23,080 ms per loop (Loop #1, #2, #3, #4, #5, #6...) with seamless rewinding and zero stutter.
+
+### 5.3 Gate D — Gameplay & Audio Coexistence Telemetry
+Captured on `/dev/cu.usbmodem101` during live strategic map gameplay, menu selections, and theme toggling:
+
+```text
+=== RAM TELEMETRY [SERIAL-TRIGGER] ===
+  Free Heap:       129520 bytes (126 KB)
+  Min Free Heap:   129520 bytes (126 KB)
+  Largest Block:   114688 bytes (112 KB)
+  Task Config Stk: 16384 bytes (16 KB)
+  Task Stack HWM:  14372 bytes free
+  Battle RAM Gate: 0x3fcaff94 (65536 bytes / 64 KB contiguous SRAM)
+================================
+=== DISPLAY FLUSH PERF ===
+  Full Flushes:   159
+  Last Full Time: 35.77 ms
+  Avg Full Time:  36.30 ms (Min: 35.18 ms, Max: 36.46 ms)
+  Theoretical FPS:27.5 fps
+  DMA Timeouts:   0
+  LCD Sub Fails:  0
+==========================
+=== AUDIO TELEMETRY ===
+  Worker Status:   RUNNING
+  Loop Count:      6
+  Task Stack HWM:  840 bytes free
+  Underruns:       0
+=======================
+```
+
+### 5.4 Safety and Partition Compliance
+- **Binary Sizing:** Application binary is `1,010,560` bytes (strictly $< 1\text{ MB}$, verified safe against partition ceiling).
+- **Partition Protection:** `cardid` at `0x356000`, `recovery` at `0x700000`, and `bootloader` at `0x000000` remain 100% untouched.
+- **V1 Game Core:** Zero modifications to upstream Baye game logic, combat equations, or memory maps. All additions strictly reside in platform layer.
+
 
