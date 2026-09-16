@@ -18,7 +18,14 @@ def main() -> None:
     parser.add_argument("--listen", type=float, default=5.0, help="Listen seconds after keys")
     args = parser.parse_args()
 
-    with serial.Serial(args.port, args.baud, timeout=0.1) as ser:
+    ser = serial.Serial()
+    ser.port = args.port
+    ser.baudrate = args.baud
+    ser.timeout = 0.1
+    ser.dtr = False
+    ser.rts = False
+    ser.open()
+    with ser:
         print(f"Connected to {args.port}")
         ser.reset_input_buffer()
 

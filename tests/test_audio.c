@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include "passport_adpcm.h"
+#include "passport_audio.h"
 
 static void test_adpcm_basic(void) {
     passport_adpcm_state_t state;
@@ -121,11 +122,152 @@ static void test_clamping_and_corruption(void) {
     printf("test_clamping_and_corruption: PASS\n");
 }
 
+static void test_loop_determinism(void) {
+    #define STREAM_BYTES 200
+    #define TOTAL_SAMPLES (STREAM_BYTES * 2)
+    uint8_t adpcm_data[STREAM_BYTES];
+    for (int i = 0; i < STREAM_BYTES; i++) {
+        adpcm_data[i] = (uint8_t)((i * 37 + 13) & 0xFF);
+    }
+
+    passport_adpcm_stream_t stream;
+    passport_adpcm_state_t state;
+    passport_adpcm_state_reset(&state);
+    passport_adpcm_stream_init(&stream, adpcm_data, STREAM_BYTES, true);
+
+    int16_t loop1_pcm[TOTAL_SAMPLES];
+    int16_t loop2_pcm[TOTAL_SAMPLES];
+
+    // Read loop 1 in arbitrary chunk sizes (e.g. 50 samples)
+    size_t samples_read = 0;
+    while (samples_read < TOTAL_SAMPLES) {
+        size_t n = passport_adpcm_stream_read(&stream, &state, loop1_pcm + samples_read, 50);
+        assert(n > 0);
+        samples_read += n;
+    }
+    assert(samples_read == TOTAL_SAMPLES);
+    assert(stream.offset == stream.size);
+
+    // Read loop 2 in different chunk sizes (e.g. 32 samples)
+    samples_read = 0;
+    while (samples_read < TOTAL_SAMPLES) {
+        size_t to_req = (TOTAL_SAMPLES - samples_read > 32) ? 32 : (TOTAL_SAMPLES - samples_read);
+        size_t n = passport_adpcm_stream_read(&stream, &state, loop2_pcm + samples_read, to_req);
+        assert(n > 0);
+        samples_read += n;
+    }
+    assert(samples_read == TOTAL_SAMPLES);
+    assert(stream.loop_count == 1);
+    assert(stream.offset == stream.size);
+
+    // Byte-for-byte comparison of Loop 1 PCM vs Loop 2 PCM
+    assert(memcmp(loop1_pcm, loop2_pcm, sizeof(loop1_pcm)) == 0);
+
+    // Test chunk reads that cross the boundary in the middle of a chunk
+    passport_adpcm_state_reset(&state);
+    passport_adpcm_stream_init(&stream, adpcm_data, STREAM_BYTES, true);
+    int16_t boundary_test_pcm[TOTAL_SAMPLES * 2];
+    size_t r1 = passport_adpcm_stream_read(&stream, &state, boundary_test_pcm, 300);
+    assert(r1 == 300);
+    assert(stream.loop_count == 0);
+    size_t r2 = passport_adpcm_stream_read(&stream, &state, boundary_test_pcm + 300, 200);
+    assert(r2 == 200);
+    assert(stream.loop_count == 1);
+    // Samples 0..99 of loop 2 must match samples 0..99 of loop 1
+    assert(memcmp(boundary_test_pcm + 400, boundary_test_pcm, 100 * sizeof(int16_t)) == 0);
+
+    printf("test_loop_determinism: PASS\n");
+}
+
+static void test_volume_controls(void) {
+    char buf[32];
+    int len;
+
+    len = passport_volume_format_text(0, buf, sizeof(buf));
+    assert(len == 5);
+    assert(strcmp(buf, "VOL 0") == 0);
+
+    len = passport_volume_format_text(50, buf, sizeof(buf));
+    assert(len == 6);
+    assert(strcmp(buf, "VOL 50") == 0);
+
+    len = passport_volume_format_text(100, buf, sizeof(buf));
+    assert(len == 7);
+    assert(strcmp(buf, "VOL 100") == 0);
+
+    // Negative / overflow clamping
+    len = passport_volume_format_text(-10, buf, sizeof(buf));
+    assert(len == 5);
+    assert(strcmp(buf, "VOL 0") == 0);
+
+    len = passport_volume_format_text(120, buf, sizeof(buf));
+    assert(len == 7);
+    assert(strcmp(buf, "VOL 100") == 0);
+
+    // Small buffer guard
+    char small_buf[5];
+    len = passport_volume_format_text(50, small_buf, sizeof(small_buf));
+    assert(len == -1);
+
+    // Bitmap rendering test with canary bounds
+    #define CANARY 0xCAFE
+    #define PADDING 16
+    const int total_pixels = VOLUME_W * VOLUME_H + PADDING * 2;
+    uint16_t buffer[total_pixels];
+
+    for (int i = 0; i < total_pixels; i++) buffer[i] = CANARY;
+    uint16_t *widget = buffer + PADDING;
+
+    passport_volume_render_bitmap(50, widget, VOLUME_W, VOLUME_H);
+
+    for (int i = 0; i < PADDING; i++) {
+        assert(buffer[i] == CANARY);
+        assert(widget[VOLUME_W * VOLUME_H + i] == CANARY);
+    }
+
+    int fg_count = 0, bg_count = 0;
+    for (int i = 0; i < VOLUME_W * VOLUME_H; i++) {
+        if (widget[i] == 0xFFFF) fg_count++;
+        else if (widget[i] == 0x0000) bg_count++;
+        else assert(0 && "Unexpected pixel color in volume widget");
+    }
+    assert(fg_count > 30 && "Expected reasonable foreground pixel count for VOL 50");
+    assert(bg_count > 100 && "Expected black background pixels");
+
+    // Volume adjustment and state logic
+    passport_audio_set_volume(50);
+    assert(passport_audio_get_volume() == 50);
+
+    passport_audio_adjust_volume(+10);
+    assert(passport_audio_get_volume() == 60);
+
+    passport_audio_adjust_volume(+50);
+    assert(passport_audio_get_volume() == 100);
+
+    passport_audio_adjust_volume(+10); // Clamped at 100
+    assert(passport_audio_get_volume() == 100);
+
+    passport_audio_adjust_volume(-10);
+    assert(passport_audio_get_volume() == 90);
+
+    passport_audio_adjust_volume(-100); // Clamped at 0 (mute)
+    assert(passport_audio_get_volume() == 0);
+
+    passport_audio_adjust_volume(-10); // Still 0
+    assert(passport_audio_get_volume() == 0);
+
+    printf("test_volume_controls: PASS\n");
+}
+
 int main(void) {
     printf("--- Running test_audio ---\n");
     test_adpcm_basic();
     test_chunk_boundaries();
     test_streaming_and_loop();
     test_clamping_and_corruption();
+    test_loop_determinism();
+    test_volume_controls();
     return 0;
 }
+
+

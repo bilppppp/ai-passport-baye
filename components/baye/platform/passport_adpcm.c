@@ -122,6 +122,7 @@ size_t passport_adpcm_stream_read(
             if (stream->loop) {
                 stream->offset = 0;
                 stream->loop_count++;
+                passport_adpcm_state_reset(state);
             } else {
                 break; // EOF
             }

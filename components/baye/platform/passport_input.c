@@ -1,5 +1,6 @@
 #include "passport_input.h"
 #include "passport_gui.h"
+#include "passport_audio.h"
 #include "inc/keytable.h"
 #include <stdio.h>
 
@@ -20,6 +21,8 @@ void passport_input_on_button(bsp_btn_t btn, bsp_btn_ev_t ev) {
                 key = CHAR_UP;
             } else if (ev == BSP_BTN_LONG) {
                 key = CHAR_LEFT;
+            } else if (ev == BSP_BTN_DOUBLE) {
+                passport_audio_adjust_volume(+10);
             }
             break;
 
@@ -28,6 +31,8 @@ void passport_input_on_button(bsp_btn_t btn, bsp_btn_ev_t ev) {
                 key = CHAR_DOWN;
             } else if (ev == BSP_BTN_LONG) {
                 key = CHAR_RIGHT;
+            } else if (ev == BSP_BTN_DOUBLE) {
+                passport_audio_adjust_volume(-10);
             }
             break;
 
@@ -90,6 +95,10 @@ static void baye_serial_input_task(void *arg) {
             s_retro = !s_retro;
             passport_display_set_theme(s_retro);
             ESP_LOGI(TAG, "Theme toggled to %s", s_retro ? "Retro Amber-Green" : "B&W High Contrast");
+        } else if (c == ']') {
+            passport_audio_adjust_volume(+10);
+        } else if (c == '[') {
+            passport_audio_adjust_volume(-10);
         }
         if (key != 0) {
             ESP_LOGI(TAG, "Serial input '%c' -> Key 0x%02X", (char)c, key);

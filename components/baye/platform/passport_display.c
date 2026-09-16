@@ -1,5 +1,6 @@
 #include "passport_display.h"
 #include "passport_battery.h"
+#include "passport_audio.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -165,6 +166,9 @@ void passport_display_init(void) {
         // Initialize and paint persistent battery widget in top-right letterbox
         passport_battery_init();
         passport_battery_force_refresh();
+
+        // Paint persistent volume widget in top-left letterbox
+        passport_audio_hud_force_refresh();
     }
 #else
     s_strip_buf = s_strip_buf_static;
@@ -178,6 +182,7 @@ void passport_display_init(void) {
 void passport_display_flush(void) {
 #ifdef ESP_PLATFORM
     passport_battery_tick();
+    passport_audio_hud_tick();
 #endif
     if (!s_dirty) return;
 

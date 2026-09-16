@@ -76,16 +76,17 @@ Everest ES8311 Codec ──> NS4150 Class-D PA ──> Speaker
 
 ## 4. Loop Behavior & Timing
 
-- **Boundary Transition:** At the end of byte 184,600, the stream cursor cleanly wraps around to offset 0:
+- **Boundary Transition:** At the end of byte 184,600, the stream cursor cleanly wraps around to offset 0 and explicitly resets the ADPCM decoder state (`passport_adpcm_state_reset`) to ensure cycle-to-cycle mathematical determinism:
   ```c
   if (stream->offset >= stream->size) {
       if (stream->loop) {
           stream->offset = 0;
           stream->loop_count++;
+          passport_adpcm_state_reset(state);
       }
   }
   ```
-- **Loop Boundary Gap:** **$< 1\text{ ms}$ (near zero / seamless)**. Because the last measure resolves cleanly on the tonic $A4$ followed by a matched rest, the loop transition exhibits zero DC pop or clicking.
+- **Loop Boundary Gap:** **$< 1\text{ ms}$ (near zero / seamless)**. Because the last measure resolves cleanly on the tonic $A4$ followed by a matched rest, and decoder state is reset, the loop transition exhibits zero DC pop, clicking, or cumulative sample drift.
 - **Loop Telemetry:** Each loop increment is captured by `passport_audio_worker` with timestamp and logged to the console:
   ```text
   I (...) baye_audio: BGM Loop #1 completed (cycle duration: 23072 ms, seamless rewind)
@@ -93,7 +94,31 @@ Everest ES8311 Codec ──> NS4150 Class-D PA ──> Speaker
 
 ---
 
-## 5. Coexistence with LCD DMA & Game Loop
+## 5. Volume Control UX & NVS Persistence
+
+### 5.1 Control Inputs
+- **Hardware Buttons (ADC Ladder):**
+  - `UP DOUBLE`: Volume $+10\%$ (clamped to max $100\%$)
+  - `DOWN DOUBLE`: Volume $-10\%$ (clamped to min $0\%$, pure mute)
+  - Existing `CLICK` and `LONG` key gestures remain 100% unaltered.
+- **Serial Console Shortcuts:**
+  - `]`: Volume $+10\%$
+  - `[`: Volume $-10\%$
+
+### 5.2 Top Letterbox Volume HUD
+- **Location:** Top-left letterbox ($X=6..53, Y=7..16$, dimension $48 \times 10$ pixels, RGB565).
+- **Presentation:** High-contrast retro white text on black background (`VOL 0` .. `VOL 100`) mirroring the battery indicator in the top-right letterbox ($X=266..313, Y=7..16$).
+- **Lifecycle & DMA Safety:** Renders exclusively within the display pipeline via non-blocking DMA. Only flushes when the volume state changes (`dirty` flag).
+
+### 5.3 NVS Persistence Specification
+- **Namespace:** `baye_cfg`
+- **Key:** `volume` (`uint8_t`, range $0..100$)
+- **Behavior:** Only written upon deliberate volume adjustments. Restored on system boot; falls back to `CONFIG_BAYE_MUSIC_VOLUME` (default 70%) if unset.
+- **Partition Protection:** Operates in separate namespace `baye_cfg`; strictly isolates and preserves all game saves (`sango*` in `baye_sav`), factory `cardid`, and `recovery` partitions.
+
+---
+
+## 6. Coexistence with LCD DMA & Game Loop
 
 1. **Scheduling Isolation:**
    The Baye C engine executes inside `baye_game` (Priority 5, 16 KiB stack).  
@@ -104,3 +129,4 @@ Everest ES8311 Codec ──> NS4150 Class-D PA ──> Speaker
    Target metrics remain:
    - `DMA Timeout Count = 0`
    - `LCD Submit Fail Count = 0`
+

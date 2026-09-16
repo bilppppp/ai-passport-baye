@@ -147,8 +147,36 @@ Captured on `/dev/cu.usbmodem101` during live strategic map gameplay, menu selec
 ```
 
 ### 5.4 Safety and Partition Compliance
-- **Binary Sizing:** Application binary is `1,010,560` bytes (strictly $< 1\text{ MB}$, verified safe against partition ceiling).
+- **Binary Sizing:** Application binary is `1,013,248` bytes (strictly $< 1\text{ MB}$, verified safe against partition ceiling).
 - **Partition Protection:** `cardid` at `0x356000`, `recovery` at `0x700000`, and `bootloader` at `0x000000` remain 100% untouched.
 - **V1 Game Core:** Zero modifications to upstream Baye game logic, combat equations, or memory maps. All additions strictly reside in platform layer.
+
+### 5.5 Gate E — Volume Control UX & ADPCM Determinism
+- **Physical Controls:**
+  - `UP DOUBLE` gesture triggers $+10\%$ step.
+  - `DOWN DOUBLE` gesture triggers $-10\%$ step.
+  - Serial shortcuts `]` ($+10\%$) and `[` ($-10\%$) verified.
+  - Volume range strictly clamped to $0..100$ in 10-step increments ($0, 10, 20, \dots, 100$).
+- **Level Discrimination:**
+  - `0%` (Mute): Audio codec output muted, BGM stream continues decoding without underrun.
+  - `10%`, `30%`, `50%`, `70%`, `100%`: Linear acoustic volume progression confirmed on hardware speaker.
+- **HUD Indicator:**
+  - Renders dynamically at top-left letterbox ($X=6..53, Y=7..16$, $48 \times 10$ pixels, RGB565).
+  - Only flushes when dirty; zero interference with $160 \times 96 \to 320 \times 192$ game rendering area.
+- **NVS Persistence:**
+  - Namespace `baye_cfg`, key `volume` (`uint8_t`).
+  - Cold reboot restore verified on physical hardware: volume set to 30%, hard reset issued, boot log confirms:
+    `Restored volume 30% from NVS (namespace: baye_cfg, key: volume)`
+    `Volume HUD refreshed: VOL 30`
+  - Zero modification to `baye_sav` (`sango0`..`sango3`), `cardid`, or `recovery`.
+- **ADPCM Loop Determinism:**
+  - Stream rewind explicitly calls `passport_adpcm_state_reset()`.
+  - Host deterministic test verified two consecutive 400-sample loops produce identical byte-for-byte PCM outputs.
+- **Coexistence Telemetry:**
+  - `Underruns = 0`
+  - `DMA Timeouts = 0`
+  - `LCD Submit Fails = 0`
+  - `Free Heap = 125 KB` ($> 64\text{ KB}$ battle gate completely uncompromised).
+
 
 

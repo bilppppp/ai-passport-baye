@@ -27,6 +27,7 @@ clang -std=c11 -Wall -Wextra -Werror \
   "$PROJECT_DIR/components/baye/platform/passport_display.c" \
   "$PROJECT_DIR/components/baye/platform/passport_gui.c" \
   "$PROJECT_DIR/components/baye/platform/passport_input.c" \
+  "$PROJECT_DIR/components/baye/platform/passport_audio.c" \
   "$PROJECT_DIR/tests/test_keys.c" \
   -o "$BUILD_DIR/test_keys"
 "$BUILD_DIR/test_keys"
@@ -54,6 +55,7 @@ clang -std=c11 -Wall -Wextra -Werror \
 clang -std=c11 -Wall -Wextra -Werror \
   -I"$PROJECT_DIR/components/baye/platform" \
   "$PROJECT_DIR/components/baye/platform/passport_adpcm.c" \
+  "$PROJECT_DIR/components/baye/platform/passport_audio.c" \
   "$PROJECT_DIR/tests/test_audio.c" \
   -o "$BUILD_DIR/test_audio"
 "$BUILD_DIR/test_audio"
