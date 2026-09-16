@@ -1,0 +1,33 @@
+# ESP-IDF and local tool output
+/build/
+/build-*/
+/managed_components/
+/sdkconfig
+/sdkconfig.old
+/dependencies.lock.new
+/.device-venv/
+/dist/
+
+# Never publish device or full-flash material
+/device-backups/
+/*full-flash*.bin
+/*-full.bin
+
+# Private content overlays stay outside the public repository. These rules are
+# a guardrail; tools/audit_public_release.py remains the release authority.
+/assets/private/
+/packs/private/
+/components/ntd_game/assets/private*
+/components/ntd_game/generated_dlc/
+/components/ntd_game/.generated_dlc-*/
+
+# Editor, OS and Python noise
+.DS_Store
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+.vscode/
