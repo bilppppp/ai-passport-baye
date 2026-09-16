@@ -69,10 +69,10 @@ U8 PlayerTactic(void)
 {
     U8 cset;
     U8 cral;
-
     while (1)
     {
         cset = GetCitySet(&g_CityPos);
+        BAYE_LOG("baye_tactic", "GetCitySet returned 0x%02X", (int)cset);
 
         if (0xff == cset)
         {
@@ -687,6 +687,7 @@ void ConditionUpdate(void)
     CitiesUpDataDate();
     EventStateDeal();
     RandEvents();
+    BAYE_LOG("baye_tactic", "Month advanced to Year %d Month %d", (int)g_YearDate, (int)g_MonthDate);
 }
 
 /******************************************************************************
@@ -1133,22 +1134,25 @@ U8 FunctionMenu(void)
     const char* exitStr = "\xc8\xb7\xb6\xa8\xcd\xcb\xb3\xf6"; //确定退出
     U8 choosing = 0;
 
-    while (1)
-    switch ((choosing = PlcSplMenu(&pRect,choosing,mstr)))
-    {
-        case 0:
-            return(1);
-        case 1:
-            GamRecordMan(0);
-            return(0);
-        case 2:
-            if (PlcSplMenu(&pRectSubMenu, 0, (U8*)exitStr) == MNU_EXIT) {
-                ShowMapClear();
-                continue;
-            }
-            return(2);
-        case 0xff:
-            return(0);
+    while (1) {
+        choosing = PlcSplMenu(&pRect,choosing,mstr);
+        BAYE_LOG("baye_tactic", "FunctionMenu choice: %d", (int)choosing);
+        switch (choosing)
+        {
+            case 0:
+                return(1);
+            case 1:
+                GamRecordMan(0);
+                return(0);
+            case 2:
+                if (PlcSplMenu(&pRectSubMenu, 0, (U8*)exitStr) == MNU_EXIT) {
+                    ShowMapClear();
+                    continue;
+                }
+                return(2);
+            case 0xff:
+                return(0);
+        }
     }
     return 0;
 }

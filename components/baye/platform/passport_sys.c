@@ -19,7 +19,6 @@ FAR void SysMemInit(U16 start, U16 len) {
     (void)len;
     gam_timer_init();
     gam_timer_set_callback(_timercb);
-    gam_timer2_open(3, passport_display_flush);
 }
 
 FAR U8 SysGetKey(void) {

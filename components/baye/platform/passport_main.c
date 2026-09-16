@@ -15,6 +15,7 @@ static const char *TAG = "baye_main";
 static TaskHandle_t s_game_task_handle = NULL;
 
 extern void GamBaYeEng(void);
+extern uint8_t *g_FightMapData;
 
 void baye_log_telemetry(const char *phase_label) {
     uint32_t free_heap = esp_get_free_heap_size();
@@ -27,6 +28,7 @@ void baye_log_telemetry(const char *phase_label) {
     ESP_LOGI(TAG, "  Min Free Heap:   %u bytes (%u KB)", (unsigned)min_heap, (unsigned)(min_heap / 1024));
     ESP_LOGI(TAG, "  Largest Block:   %u bytes (%u KB)", (unsigned)max_block, (unsigned)(max_block / 1024));
     ESP_LOGI(TAG, "  Task Stack HWM:  %u words (%u bytes free)", (unsigned)stack_wm, (unsigned)(stack_wm * sizeof(StackType_t)));
+    ESP_LOGI(TAG, "  Battle RAM Gate: %p (65536 bytes / 64 KB contiguous SRAM)", (void *)g_FightMapData);
     ESP_LOGI(TAG, "================================");
 }
 

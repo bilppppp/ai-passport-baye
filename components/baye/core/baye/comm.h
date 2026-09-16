@@ -3,6 +3,14 @@
 
 #include "inc/dictsys.h"
 
+#ifdef ESP_PLATFORM
+#include "esp_log.h"
+#define BAYE_LOG(tag, fmt, ...) ESP_LOGI(tag, fmt, ##__VA_ARGS__)
+#else
+#include <stdio.h>
+#define BAYE_LOG(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
+#endif
+
 #ifndef BOOL
 #define BOOL I8
 #endif

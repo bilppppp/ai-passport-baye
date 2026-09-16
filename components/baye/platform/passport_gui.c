@@ -50,7 +50,23 @@ U8 GuiPushMsg(PtrMsg pMsg) {
         }
         return ret == pdTRUE ? 1 : 0;
     } else {
-        return xQueueSend(s_msg_queue, pMsg, pdMS_TO_TICKS(10)) == pdTRUE ? 1 : 0;
+        if (pMsg->type == VM_TIMER) {
+            // Never allow timer ticks to clog the queue; only push if queue has <= 1 message
+            if (uxQueueMessagesWaiting(s_msg_queue) > 1) {
+                return 0;
+            }
+            return xQueueSend(s_msg_queue, pMsg, 0) == pdTRUE ? 1 : 0;
+        } else {
+            // Key / Touch / System event: must never be dropped!
+            ESP_LOGI(TAG, "Pushing KEY msg type=0x%02X param=0x%04X (queue len=%d)",
+                     pMsg->type, pMsg->param, (int)uxQueueMessagesWaiting(s_msg_queue));
+            while (xQueueSend(s_msg_queue, pMsg, pdMS_TO_TICKS(50)) != pdTRUE) {
+                // Drop oldest message if queue is somehow full
+                MsgType dummy;
+                xQueueReceive(s_msg_queue, &dummy, 0);
+            }
+            return 1;
+        }
     }
 #else
     if (s_host_q_count >= HOST_QUEUE_CAP) return 0;
@@ -70,6 +86,9 @@ U8 GuiGetMsg(PtrMsg pMsg) {
 #ifdef ESP_PLATFORM
     if (!s_msg_queue) return 0;
     if (xQueueReceive(s_msg_queue, pMsg, portMAX_DELAY) == pdTRUE) {
+        if (pMsg->type != VM_TIMER) {
+            ESP_LOGI(TAG, "Popped msg type=0x%02X param=0x%04X", pMsg->type, pMsg->param);
+        }
         return 1;
     }
     return 0;

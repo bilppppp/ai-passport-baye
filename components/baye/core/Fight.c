@@ -77,7 +77,9 @@ void FgtChkEnd(U8 flag);
  ***********************************************************************/
 FAR U8 GamFight(void)
 {
+    BAYE_LOG("baye_fight", "GamFight entered! Mode=%d, MapId=%d", (int)g_FgtParam.Mode, (int)g_FgtParam.MapId);
     FgtInit();
+    BAYE_LOG("baye_fight", "FgtInit complete: map %dx%d, FightMapData=%p", (int)g_MapWid, (int)g_MapHgt, g_FightMapData);
     if (!g_FgtOver) {
         call_hook("enterBattle", NULL);
 #define CHECK_OVER() if(g_FgtOver) break;
@@ -104,6 +106,7 @@ FAR U8 GamFight(void)
         call_hook("exitBattle", NULL);
     }
     /* 战斗只通过g_FgtOver返回胜败，战后处理由外部完成 */
+    BAYE_LOG("baye_fight", "GamFight finished, g_FgtOver=%d", (int)g_FgtOver);
     return 0;
 }
 /***********************************************************************

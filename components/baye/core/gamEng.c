@@ -29,12 +29,15 @@ static const U8*dataDir;
 
 static gam_FILE* sav_fopen(U8*filename, U8 mode)
 {
-    U8 pathBuf[2048];
-    pathBuf[0] = 0;
-    gam_strcat(pathBuf, dataDir);
-    gam_strcat(pathBuf, "/");
-    gam_strcat(pathBuf, filename);
-    return gam_fopen(pathBuf, mode);
+    if (dataDir && dataDir[0]) {
+        U8 pathBuf[256];
+        pathBuf[0] = 0;
+        gam_strcat(pathBuf, dataDir);
+        gam_strcat(pathBuf, "/");
+        gam_strcat(pathBuf, filename);
+        return gam_fopen(pathBuf, mode);
+    }
+    return gam_fopen(filename, mode);
 }
 
 /*本体函数声明*/
@@ -68,32 +71,42 @@ static U8* customData = NULL;
  ***********************************************************************/
 FAR void GamBaYeEng(void)
 {
+    BAYE_LOG("baye_eng", "GamBaYeEng started");
     /* 初始化游戏环境 */
     if(GamConInit())
     {
+        BAYE_LOG("baye_eng", "GamConInit failed!");
         GamShowErrInf(0);
         return;
     }
+    BAYE_LOG("baye_eng", "GamConInit OK");
 
     /* 初始化游戏变量 */
     if(GamVarInit())
     {
+        BAYE_LOG("baye_eng", "GamVarInit failed!");
         GamShowErrInf(1);
         GamVarRst();
         GamConRst();
         return;
     }
+    BAYE_LOG("baye_eng", "GamVarInit OK, entering GamMovie(MAIN_SPE)");
     /* 显示游戏开始动画 */
-    GamMovie(MAIN_SPE);
+    U8 mres = GamMovie(MAIN_SPE);
+    BAYE_LOG("baye_eng", "GamMovie(MAIN_SPE) returned 0x%02X", (int)mres);
     
     do
     {
         /* 获取游戏选项 */
-        if(!GamMainChose())
+        BAYE_LOG("baye_eng", "Calling GamMainChose()");
+        if(!GamMainChose()) {
+            BAYE_LOG("baye_eng", "GamMainChose returned false (exit)");
             break;
+        }
+        BAYE_LOG("baye_eng", "Entering GameDevDrv()");
         GameDevDrv();	 	/* 游戏引擎入口程序 */
+        BAYE_LOG("baye_eng", "Exited GameDevDrv()");
     } while (1);
-
 
     GamVarRst();
     GamConRst();
@@ -194,14 +207,18 @@ bool GamMainChose(void)
     {
         GamClearLastMsg();
         U8 choice = GamPicMenu(MAIN_PIC,MAIN_ICON1, mainMenuButtonRects, 4, false);
+        BAYE_LOG("baye_main", "MainMenu selected: %d", (int)choice);
         switch(choice)
         {
             case 0:		/* 新君登基 */
                 idx = GamPicMenu(YEAR_PIC,YEAR_ICON1, periodMenuButtonRects, 4, true);
+                BAYE_LOG("baye_main", "Period selected: %d", (int)idx);
                 if(idx == MNU_EXIT)
                     break;
                 idx = GetPeriodKings(idx + 1,g_FgtAtkRng); 	/* 设置历史时期，并获取君主队列 */
+                BAYE_LOG("baye_main", "Period kings count: %d", (int)idx);
                 idx = GamGetKing(idx);
+                BAYE_LOG("baye_main", "GamGetKing selected king: %d", (int)idx);
                 if(idx == MNU_EXIT)
                     break;
                 g_PlayerKing = idx;				/* 设置玩家扮演的君主ID */
@@ -277,6 +294,7 @@ U8 GamPicMenu(U16 picID,U16 speID, const Rect *buttonsRect, U8 buttonsCount, U8 
     Touch touch = {0};
 
     mIdx = 0;
+    BAYE_LOG("baye_picmenu", "GamPicMenu enter picID=%d, speID=%d", (int)picID, (int)speID);
     PlcRPicShow(picID,1,WK_SX,WK_SY,false);
     while(1)
     {
@@ -286,6 +304,10 @@ U8 GamPicMenu(U16 picID,U16 speID, const Rect *buttonsRect, U8 buttonsCount, U8 
         }
         else {
             GamGetLastMsg(&pMsg);
+        }
+        if (pMsg.type != VM_TIMER) {
+            BAYE_LOG("baye_picmenu", "GamPicMenu key=0x%02X, type=0x%02X, param=0x%02X, mIdx=%d",
+                     (int)key, (int)pMsg.type, (int)pMsg.param, (int)mIdx);
         }
         if(VM_CHAR_FUN == pMsg.type)
         {
@@ -300,8 +322,10 @@ U8 GamPicMenu(U16 picID,U16 speID, const Rect *buttonsRect, U8 buttonsCount, U8 
                     mIdx += 1;
                     break;
                 case VK_ENTER:
+                    BAYE_LOG("baye_picmenu", "GamPicMenu ENTER selected %d", (int)mIdx);
                     return mIdx;
                 case VK_EXIT:
+                    BAYE_LOG("baye_picmenu", "GamPicMenu EXIT pressed");
                     return MNU_EXIT;
             }
             mIdx = mIdx % 4;
@@ -724,6 +748,7 @@ bool GamLoadRcd(U8 idx)
     U8	tbuf[20];
     gam_FILE	*fp;
     U8 verFlag = 0;
+    BAYE_LOG("baye_save", "GamLoadRcd(slot=%d) start", (int)idx);
 
     ResLoadToMem(IFACE_STRID,dReading,tbuf);
     GamMsgBox(tbuf,0);
@@ -809,6 +834,7 @@ bool GamLoadRcd(U8 idx)
     
     gam_fclose(fp);
     call_hook("didLoadGame", NULL);
+    BAYE_LOG("baye_save", "GamLoadRcd(slot=%d) SUCCESS", (int)idx);
     return true;	
 }
 /***********************************************************************
@@ -825,6 +851,7 @@ bool GamSaveRcd(U8 idx)
 {
     U8	tbuf[20];
     gam_FILE	*fp;
+    BAYE_LOG("baye_save", "GamSaveRcd(slot=%d) start", (int)idx);
     
     ResLoadToMem(IFACE_STRID,dWriting,tbuf);
     GamMsgBox(tbuf,0);
@@ -880,6 +907,7 @@ bool GamSaveRcd(U8 idx)
     }
     
     gam_fclose(fp);
+    BAYE_LOG("baye_save", "GamSaveRcd(slot=%d) SUCCESS", (int)idx);
     return true;
 }
 
