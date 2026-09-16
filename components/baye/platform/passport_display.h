@@ -35,6 +35,7 @@ void passport_display_set_theme(bool retro);
 // Mark screen dirty and request flush
 void passport_display_mark_dirty(int y1, int y2);
 void passport_display_flush(void);
+void passport_display_log_perf(void);
 
 // Get direct access to the 1bpp framebuffer (for unit tests / inspection)
 uint8_t *passport_display_get_fb(void);

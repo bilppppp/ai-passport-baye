@@ -10,12 +10,28 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "bsp_disp";
 
 static esp_lcd_panel_handle_t    s_panel;
 static esp_lcd_panel_io_handle_t s_io;
 static bool                      s_bl_ready;
+static SemaphoreHandle_t         s_trans_done_sem = NULL;
+
+static bool bsp_display_on_color_trans_done(esp_lcd_panel_io_handle_t io,
+                                            esp_lcd_panel_io_event_data_t *edata,
+                                            void *user_ctx)
+{
+    (void)io;
+    (void)edata;
+    (void)user_ctx;
+    BaseType_t high_task_woken = pdFALSE;
+    if (s_trans_done_sem) {
+        xSemaphoreGiveFromISR(s_trans_done_sem, &high_task_woken);
+    }
+    return high_task_woken == pdTRUE;
+}
 
 // ---------------------------------------------------------------------------
 // ST7789P3 厂商专属初始化序列(porch / power / gamma)。
@@ -107,6 +123,18 @@ esp_err_t bsp_display_init(void) {
     e = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)BSP_LCD_SPI_HOST, &io_cfg, &s_io);
     if (e != ESP_OK) { ESP_LOGE(TAG, "panel_io 创建失败: %s", esp_err_to_name(e)); return e; }
 
+    if (!s_trans_done_sem) {
+        s_trans_done_sem = xSemaphoreCreateCounting(10, 0);
+    }
+    const esp_lcd_panel_io_callbacks_t cbs = {
+        .on_color_trans_done = bsp_display_on_color_trans_done,
+    };
+    e = esp_lcd_panel_io_register_event_callbacks(s_io, &cbs, NULL);
+    if (e != ESP_OK) {
+        ESP_LOGE(TAG, "注册 on_color_trans_done 回调失败: %s", esp_err_to_name(e));
+        return e;
+    }
+
     esp_lcd_panel_dev_config_t dev = {
         .reset_gpio_num = BSP_LCD_RST,          // -1 → SWRESET 软复位
         .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_RGB,
@@ -146,6 +174,15 @@ esp_err_t bsp_display_set_rotation(bool swap_xy, bool mirror_x, bool mirror_y) {
 esp_lcd_panel_handle_t bsp_display_panel(void) { return s_panel; }
 
 esp_lcd_panel_io_handle_t bsp_display_io(void) { return s_io; }
+
+esp_err_t bsp_display_wait_trans_done(uint32_t timeout_ms) {
+    if (!s_trans_done_sem) return ESP_ERR_INVALID_STATE;
+    TickType_t ticks = (timeout_ms == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
+    if (xSemaphoreTake(s_trans_done_sem, ticks) == pdTRUE) {
+        return ESP_OK;
+    }
+    return ESP_ERR_TIMEOUT;
+}
 
 void bsp_display_backlight(uint8_t percent) {
     if (!s_bl_ready) return;

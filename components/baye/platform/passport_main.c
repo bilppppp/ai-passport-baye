@@ -30,6 +30,7 @@ void baye_log_telemetry(const char *phase_label) {
     ESP_LOGI(TAG, "  Task Stack HWM:  %u words (%u bytes free)", (unsigned)stack_wm, (unsigned)(stack_wm * sizeof(StackType_t)));
     ESP_LOGI(TAG, "  Battle RAM Gate: %p (65536 bytes / 64 KB contiguous SRAM)", (void *)g_FightMapData);
     ESP_LOGI(TAG, "================================");
+    passport_display_log_perf();
 }
 
 static void baye_game_task(void *arg) {

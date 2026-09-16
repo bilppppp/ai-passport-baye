@@ -24,5 +24,9 @@ esp_lcd_panel_handle_t bsp_display_panel(void);
 // 取底层 panel io 句柄。
 esp_lcd_panel_io_handle_t bsp_display_io(void);
 
+// 等待前次 DMA 传输完成（以保证写入源 buffer 安全复用）
+// timeout_ms: 超时毫秒数 (传入 UINT32_MAX 表示无限等待)
+esp_err_t bsp_display_wait_trans_done(uint32_t timeout_ms);
+
 // 背光亮度 0..100(%)。LEDC PWM,0=全灭。
 void bsp_display_backlight(uint8_t percent);

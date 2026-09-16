@@ -7,8 +7,16 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_panel_ops.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "bsp_display.h"
 static const char *TAG = "baye_disp";
+static uint32_t s_full_flush_count = 0;
+static int64_t  s_total_full_flush_us = 0;
+static int64_t  s_last_full_flush_us = 0;
+static int64_t  s_min_full_flush_us = 0;
+static int64_t  s_max_full_flush_us = 0;
 #else
 #define ESP_LOGI(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGW(tag, fmt, ...) printf("[%s] WARN: " fmt "\n", tag, ##__VA_ARGS__)
@@ -117,10 +125,17 @@ void passport_display_init(void) {
         }
         // Top border: y = 0..23 (24 rows = 16 rows + 8 rows)
         esp_lcd_panel_draw_bitmap(panel, 0, 0, PASSPORT_PHYS_W, 16, s_strip_buf);
+        bsp_display_wait_trans_done(100);
+
         esp_lcd_panel_draw_bitmap(panel, 0, 16, PASSPORT_PHYS_W, 24, s_strip_buf);
+        bsp_display_wait_trans_done(100);
+
         // Bottom border: y = 216..239 (24 rows)
         esp_lcd_panel_draw_bitmap(panel, 0, 216, PASSPORT_PHYS_W, 232, s_strip_buf);
+        bsp_display_wait_trans_done(100);
+
         esp_lcd_panel_draw_bitmap(panel, 0, 232, PASSPORT_PHYS_W, 240, s_strip_buf);
+        bsp_display_wait_trans_done(100);
     }
 #else
     s_strip_buf = s_strip_buf_static;
@@ -135,6 +150,7 @@ void passport_display_flush(void) {
     if (!s_dirty) return;
 
 #ifdef ESP_PLATFORM
+    int64_t t_start = esp_timer_get_time();
     esp_lcd_panel_handle_t panel = bsp_display_panel();
     if (!panel || !s_strip_buf) {
         s_dirty = false;
@@ -176,12 +192,46 @@ void passport_display_flush(void) {
         int py_start = BAYE_OFFSET_Y + ly_start * BAYE_SCALE;
         int py_end   = py_start + logical_rows_in_strip * BAYE_SCALE;
         esp_lcd_panel_draw_bitmap(panel, 0, py_start, PASSPORT_PHYS_W, py_end, s_strip_buf);
+
+        // Block until DMA transaction completes before modifying s_strip_buf for next strip
+        esp_err_t wait_err = bsp_display_wait_trans_done(100);
+        if (wait_err != ESP_OK) {
+            ESP_LOGW(TAG, "Strip %d wait DMA timeout: %s", strip, esp_err_to_name(wait_err));
+        }
+    }
+
+    if (start_strip == 0 && end_strip == ((BAYE_LOGICAL_H / STRIP_LOGICAL_ROWS) - 1)) {
+        int64_t dur_us = esp_timer_get_time() - t_start;
+        s_full_flush_count++;
+        s_total_full_flush_us += dur_us;
+        s_last_full_flush_us = dur_us;
+        if (dur_us < s_min_full_flush_us || s_min_full_flush_us == 0) s_min_full_flush_us = dur_us;
+        if (dur_us > s_max_full_flush_us) s_max_full_flush_us = dur_us;
     }
 #endif
 
     s_dirty = false;
     s_dirty_min_y = BAYE_LOGICAL_H - 1;
     s_dirty_max_y = 0;
+}
+
+void passport_display_log_perf(void) {
+#ifdef ESP_PLATFORM
+    uint32_t avg_us = s_full_flush_count ? (uint32_t)(s_total_full_flush_us / s_full_flush_count) : 0;
+    float avg_ms = avg_us / 1000.0f;
+    float last_ms = s_last_full_flush_us / 1000.0f;
+    float min_ms = s_min_full_flush_us / 1000.0f;
+    float max_ms = s_max_full_flush_us / 1000.0f;
+    float max_fps = avg_us ? (1000000.0f / (float)avg_us) : 0.0f;
+    ESP_LOGI(TAG, "=== DISPLAY FLUSH PERF ===");
+    ESP_LOGI(TAG, "  Full Flushes:   %u", (unsigned)s_full_flush_count);
+    ESP_LOGI(TAG, "  Last Full Time: %.2f ms", last_ms);
+    ESP_LOGI(TAG, "  Avg Full Time:  %.2f ms (Min: %.2f ms, Max: %.2f ms)", avg_ms, min_ms, max_ms);
+    ESP_LOGI(TAG, "  Theoretical FPS:%.1f fps", max_fps);
+    ESP_LOGI(TAG, "==========================");
+#else
+    printf("[baye_disp] Display perf not tracked on host\n");
+#endif
 }
 
 // ---------------------------------------------------------------------------
