@@ -41,4 +41,21 @@ clang -std=c11 -Wall -Wextra -Werror \
   -o "$BUILD_DIR/test_fsys"
 "$BUILD_DIR/test_fsys" "$PROJECT_DIR/components/baye/assets/dat.lib" "$PROJECT_DIR/components/baye/assets/font.bin"
 
+# 4. Test Battery Display
+clang -std=c11 -Wall -Wextra -Werror \
+  -I"$PROJECT_DIR/components/baye/platform" \
+  -I"$PROJECT_DIR/components/baye/include" \
+  "$PROJECT_DIR/components/baye/platform/passport_battery.c" \
+  "$PROJECT_DIR/tests/test_battery.c" \
+  -o "$BUILD_DIR/test_battery"
+"$BUILD_DIR/test_battery"
+
+# 5. Test Audio Decoding & Streaming Logic
+clang -std=c11 -Wall -Wextra -Werror \
+  -I"$PROJECT_DIR/components/baye/platform" \
+  "$PROJECT_DIR/components/baye/platform/passport_adpcm.c" \
+  "$PROJECT_DIR/tests/test_audio.c" \
+  -o "$BUILD_DIR/test_audio"
+"$BUILD_DIR/test_audio"
+
 echo "ALL HOST TESTS PASSED!"

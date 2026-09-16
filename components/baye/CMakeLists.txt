@@ -39,6 +39,9 @@ set(BAYE_PLATFORM_SRCS
     platform/passport_input.c
     platform/passport_bios.c
     platform/passport_sys.c
+    platform/passport_battery.c
+    platform/passport_adpcm.c
+    platform/passport_audio.c
     platform/passport_main.c
 )
 
@@ -69,3 +72,4 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
 
 target_add_binary_data(${COMPONENT_LIB} "assets/dat.lib" BINARY)
 target_add_binary_data(${COMPONENT_LIB} "assets/font.bin" BINARY)
+target_add_binary_data(${COMPONENT_LIB} "assets/baye_bgm_16k.adpcm" BINARY)

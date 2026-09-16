@@ -1,4 +1,5 @@
 #include "passport_display.h"
+#include "passport_battery.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -160,6 +161,10 @@ void passport_display_init(void) {
         // Bottom border: y = 216..239 (24 rows)
         draw_bitmap_and_wait(panel, 0, 216, PASSPORT_PHYS_W, 232, s_strip_buf, -3);
         draw_bitmap_and_wait(panel, 0, 232, PASSPORT_PHYS_W, 240, s_strip_buf, -4);
+
+        // Initialize and paint persistent battery widget in top-right letterbox
+        passport_battery_init();
+        passport_battery_force_refresh();
     }
 #else
     s_strip_buf = s_strip_buf_static;
@@ -171,6 +176,9 @@ void passport_display_init(void) {
 }
 
 void passport_display_flush(void) {
+#ifdef ESP_PLATFORM
+    passport_battery_tick();
+#endif
     if (!s_dirty) return;
 
 #ifdef ESP_PLATFORM

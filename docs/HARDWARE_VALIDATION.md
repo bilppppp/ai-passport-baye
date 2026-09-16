@@ -97,3 +97,24 @@ Firmware layout validation: PASS (app 743904 / 3145728 bytes)
 ## 4. Verification Conclusion
 
 The V1 implementation of `ai-passport-baye` is **stable, hardened, and verified on physical hardware**. All constraints have been met without altering the upstream Baye game core logic.
+
+---
+
+## 5. Enhanced Phase Validation: Battery & Audio (Baye Passport Enhanced)
+
+### 5.1 Gate A — Battery Fuel Gauge Verification
+- **Hardware Detection:** CW2017 successfully detected on shared I2C bus (`SDA=GPIO10`, `SCL=GPIO7`):
+  ```text
+  I (322) bsp_i2c: I2C 就绪 SDA=GPIO10 SCL=GPIO7
+  I (323) bsp_batt: 检测到 CW2017 VERSION=0x0F
+  I (426) baye_batt: Battery force refresh: SOC=99%
+  ```
+- **Display Integrity:** Top-right letterbox widget ($X=266..313, Y=7..16$) rendered via non-blocking DMA. Game active field ($Y=24..215$) was completely untouched.
+- **DMA Reliability:** `DMA Timeouts = 0`, `LCD Submit Fails = 0`.
+
+### 5.2 Gate B & C — Background Audio (BGM) Verification
+- **Audio Codec:** Everest ES8311 initialized via I2C (`0x18`) and configured for 16,000 Hz, 16-bit, Mono.
+- **Audio Stream:** 16kHz IMA ADPCM retro strategic march (`baye_bgm_16k.adpcm`, 180.3 KB, 23.07 seconds) streaming in 160-byte chunks every 20ms into I2S DMA.
+- **Loop Behavior:** Cursor automatically rewinds at EOF with seamless transition.
+- **RAM Headroom:** Audio worker task allocated 2,560 bytes stack, leaving $> 140\text{ KB}$ free system heap.
+

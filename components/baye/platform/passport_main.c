@@ -4,6 +4,7 @@
 #include "passport_input.h"
 #include "passport_timer.h"
 #include "passport_gui.h"
+#include "passport_audio.h"
 
 #ifdef ESP_PLATFORM
 #include "freertos/FreeRTOS.h"
@@ -34,6 +35,7 @@ void baye_log_telemetry(const char *phase_label) {
     ESP_LOGI(TAG, "  Battle RAM Gate: %p (65536 bytes / 64 KB contiguous SRAM)", (void *)g_FightMapData);
     ESP_LOGI(TAG, "================================");
     passport_display_log_perf();
+    passport_audio_log_telemetry();
 }
 
 static void baye_game_task(void *arg) {

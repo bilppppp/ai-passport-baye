@@ -160,3 +160,34 @@ In development builds (`CONFIG_BAYE_DEV_CONSOLE=1`), a background FreeRTOS task 
 - `t`: Toggle display theme (Retro Amber-Green vs. B&W High-Contrast)
 
 For production/release builds, setting `CONFIG_BAYE_DEV_CONSOLE=0` completely compiles out the task and saves its 2,048-byte stack and associated polling cycles.
+
+---
+
+## 6. Lightweight Persistent Battery Widget
+
+### 6.1 Positioning & Non-Intrusive Geometry
+The ST7789 display is 320 × 240, while the Baye game area is 320 × 192 centered vertically at $Y = 24 \dots 215$.  
+The top 24 pixels ($Y = 0 \dots 23$) serve as a physical letterbox.  
+The battery widget is anchored at the top-right corner of this letterbox:
+- **Geometry:** $X = 266 \dots 313$ (width 48 px), $Y = 7 \dots 16$ (height 10 px).
+- **Clearance:** $7\text{ px}$ from display top, $7\text{ px}$ above game area.
+- **Rendering:** Zero LVGL, zero full font engines. Minimal 5×7 numeric glyph bitmap table renders into a tiny 960-byte local buffer.
+- **Update Frequency:** Sampled from CW2017 via I2C every 30~60 seconds.
+- **LCD Pipeline Synchronization:** Transmitted via `draw_bitmap_and_wait()` inside the game thread's display pipeline, completely eliminating thread contention on the SPI bus.
+
+---
+
+## 7. Baye Passport Enhanced: Background Audio Architecture
+
+### 7.1 Separation from Game Core
+The background music system is an **Enhanced Platform Addition**, strictly decoupled from the native C game core:
+- Game logic, LCD DMA strips, button events, and game timers never block on audio decoding or writing.
+- Controlled via compile-time toggle `CONFIG_BAYE_ENHANCED_MUSIC`.
+
+### 7.2 Streaming Pipeline
+1. **Flash Asset:** 16kHz Mono IMA ADPCM encoded data embedded in `.rodata`.
+2. **Audio Worker Task (`baye_audio`):** Priority 5, 2,560-byte stack. Reads 160-byte chunks every 20ms.
+3. **IMA ADPCM Decoder:** Decodes into 320 signed 16-bit PCM samples (640 bytes).
+4. **I2S DMA Ring:** Transmitted to ES8311 DAC through an 8-descriptor DMA buffer (160ms headroom).
+5. **Seamless Loop:** At EOF, stream cursor wraps to offset 0 with near-zero boundary gap ($< 1\text{ ms}$).
+

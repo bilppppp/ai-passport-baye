@@ -2,6 +2,7 @@
 #include "esp_err.h"
 #include "bsp_display.h"
 #include "baye_main.h"
+#include "passport_audio.h"
 
 static const char *TAG = "main";
 
@@ -18,6 +19,12 @@ void app_main(void) {
     }
     // Turn on display backlight
     bsp_display_backlight(85);
+
+    // Initialize & start background music (Enhanced feature)
+    err = passport_audio_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "passport_audio_init failed: %s (continuing without audio)", esp_err_to_name(err));
+    }
 
     // Launch Baye Game Task
     err = baye_game_start();
