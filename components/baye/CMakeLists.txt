@@ -72,4 +72,9 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
 
 target_add_binary_data(${COMPONENT_LIB} "assets/dat.lib" BINARY)
 target_add_binary_data(${COMPONENT_LIB} "assets/font.bin" BINARY)
-target_add_binary_data(${COMPONENT_LIB} "assets/baye_bgm_16k.adpcm" BINARY)
+target_add_binary_data(${COMPONENT_LIB} "assets/baye_title_16k.adpcm" BINARY)
+target_add_binary_data(${COMPONENT_LIB} "assets/baye_strategy_16k.adpcm" BINARY)
+target_add_binary_data(${COMPONENT_LIB} "assets/baye_battle_16k.adpcm" BINARY)
+target_add_binary_data(${COMPONENT_LIB} "assets/baye_victory_16k.adpcm" BINARY)
+target_add_binary_data(${COMPONENT_LIB} "assets/baye_defeat_16k.adpcm" BINARY)
+

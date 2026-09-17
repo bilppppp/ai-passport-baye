@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-The original BBK (步步高) electronic dictionary game engine was developed for a 6502 8-bit architecture with hardware banking, a 1-bit timer/buzzer, a 160×96 monochrome dot-matrix display with dedicated segmented status icons, and an alphanumeric QWERTY matrix keyboard. Later ports (such as iBaye on iOS/macOS) added script hook abstractions (Lua/JS) and simulated banking over flat memory.
+The original BBK (步步高) electronic dictionary game engine was developed for a 6502 8-bit architecture with hardware banking, platform audio and melody facilities, a 160×96 monochrome dot-matrix display with dedicated segmented status icons, and an alphanumeric QWERTY matrix keyboard. Later ports (such as iBaye on iOS/macOS) added script hook abstractions (Lua/JS) and simulated banking over flat memory.
 
 For the native ESP32-C3 / FoloToy AI Passport port (`ai-passport-baye`), all platform interactions were audited to ensure:
 1. **Zero Undefined Behaviors / Missing Symbols:** Every symbol required by the Baye engine links cleanly.
@@ -29,8 +29,8 @@ For the native ESP32-C3 / FoloToy AI Passport port (`ai-passport-baye`), all pla
 | `ResetFlash` | `passport_bios.c` | Historical Dictsys reset | None in game loop | Safe empty stub | None | Retain. Uncalled by Baye core during play. |
 | `SysMemInit` | `passport_sys.c` | `comIn.c` (`GamEngineInit`) | Timer & tick subsystem initialization | Inits `gam_timer_init()` and registers `_timercb` | None | Retain. Powers the 100 Hz engine tick callback. |
 | `SysGetKey` | `passport_sys.c` | `GamGetMsg` | Polling key press from GUI queue | Calls `GuiGetMsg(&msg)` and returns `msg.param` | None | Retain. Direct consumer of FreeRTOS GUI queue. |
-| `SysGetKeySound` | `passport_sys.c` | `comIn.c` (`GamEngineInit`) | Queries whether key click beeps are enabled | Returns `0` (disabled) | None | Retain. Handheld has no buzzer; audio is silent. |
-| `SysSetKeySound` | `passport_sys.c` | `comIn.c` (`GamEngineInit`, `GamConRst`) | Toggles key click beeping | Safe empty stub `(void)keySoundFlag` | None | Retain. Harmless no-op. |
+| `SysGetKeySound` | `passport_sys.c` | `comIn.c` (`GamConInit`) | Queries whether key click beeps are enabled | Returns `0` (disabled) | None | Retain. Key click sounds are suppressed in game. |
+| `SysSetKeySound` | `passport_sys.c` | `comIn.c` (`GamConInit`, `GamConRst`) | Toggles key click beeping | Safe empty stub `(void)keySoundFlag` | None | Retain. Harmless no-op. |
 | `SysGetSecond` | `passport_sys.c` | `comIn.c` (`GamEngineInit` for `gam_srand`) | Second counter for RNG seed | Returns `(esp_timer_get_time() / 1000000ULL) % 60` | None | Retain. Provides high-entropy seed on boot. |
 | `SysGetMinute` | `passport_sys.c` | Engine time displays | Minute counter | Returns `(esp_timer_get_time() / 60000000ULL) % 60` | None | Retain. Monotonic time tracking. |
 | `SysGetHour` | `passport_sys.c` | Engine time displays | Hour counter | Returns `(esp_timer_get_time() / 3600000000ULL) % 24` | None | Retain. Monotonic time tracking. |

@@ -21,6 +21,7 @@
 #include "baye/enghead.h"
 #include "baye/bind-objects.h"
 #include "touch.h"
+#include "passport_audio.h"
 #define		IN_FILE	1	/* 当前文件位置 */
 
 /*本体函数声明*/
@@ -82,6 +83,7 @@ FAR U8 GamFight(void)
     BAYE_LOG("baye_fight", "FgtInit complete: map %dx%d, FightMapData=%p", (int)g_MapWid, (int)g_MapHgt, g_FightMapData);
     if (!g_FgtOver) {
         call_hook("enterBattle", NULL);
+        passport_audio_play(BAYE_MUSIC_BATTLE);
 #define CHECK_OVER() if(g_FgtOver) break;
         while(!g_FgtOver)
         {
@@ -104,6 +106,14 @@ FAR U8 GamFight(void)
             call_hook("battleStage5", NULL);
         }
         call_hook("exitBattle", NULL);
+
+        if (g_FgtOver == FGT_WON) {
+            passport_audio_play_once(BAYE_MUSIC_VICTORY, BAYE_MUSIC_STRATEGY);
+        } else if (g_FgtOver == FGT_LOSE) {
+            passport_audio_play_once(BAYE_MUSIC_DEFEAT, BAYE_MUSIC_STRATEGY);
+        } else {
+            passport_audio_play(BAYE_MUSIC_STRATEGY);
+        }
     }
     /* 战斗只通过g_FgtOver返回胜败，战后处理由外部完成 */
     BAYE_LOG("baye_fight", "GamFight finished, g_FgtOver=%d", (int)g_FgtOver);

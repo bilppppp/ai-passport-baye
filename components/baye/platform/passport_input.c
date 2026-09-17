@@ -99,6 +99,24 @@ static void baye_serial_input_task(void *arg) {
             passport_audio_adjust_volume(+10);
         } else if (c == '[') {
             passport_audio_adjust_volume(-10);
+        } else if (c == '1') {
+            ESP_LOGI(TAG, "Serial trigger: TITLE BGM");
+            passport_audio_play(BAYE_MUSIC_TITLE);
+        } else if (c == '2') {
+            ESP_LOGI(TAG, "Serial trigger: STRATEGY BGM");
+            passport_audio_play(BAYE_MUSIC_STRATEGY);
+        } else if (c == '3') {
+            ESP_LOGI(TAG, "Serial trigger: BATTLE BGM");
+            passport_audio_play(BAYE_MUSIC_BATTLE);
+        } else if (c == '4') {
+            ESP_LOGI(TAG, "Serial trigger: VICTORY jingle (resumes STRATEGY)");
+            passport_audio_play_once(BAYE_MUSIC_VICTORY, BAYE_MUSIC_STRATEGY);
+        } else if (c == '5') {
+            ESP_LOGI(TAG, "Serial trigger: DEFEAT jingle (resumes STRATEGY)");
+            passport_audio_play_once(BAYE_MUSIC_DEFEAT, BAYE_MUSIC_STRATEGY);
+        } else if (c == '0') {
+            ESP_LOGI(TAG, "Serial trigger: STOP audio");
+            passport_audio_stop();
         }
         if (key != 0) {
             ESP_LOGI(TAG, "Serial input '%c' -> Key 0x%02X", (char)c, key);
@@ -118,7 +136,7 @@ void passport_input_init(void) {
         ESP_LOGE(TAG, "Failed to initialize buttons: %s", esp_err_to_name(err));
     }
 #if CONFIG_BAYE_DEV_CONSOLE
-    xTaskCreate(baye_serial_input_task, "baye_serial_in", 2048, NULL, 3, NULL);
+    xTaskCreate(baye_serial_input_task, "baye_serial_in", 3584, NULL, 3, NULL);
     ESP_LOGI(TAG, "Serial input console task enabled");
 #else
     ESP_LOGI(TAG, "Serial input console disabled (release mode)");

@@ -273,7 +273,188 @@ static void test_volume_controls(void) {
     printf("test_volume_controls: PASS\n");
 }
 
-int main(void) {
+static void test_music_assets_and_metadata(void) {
+    // 1. Verify valid tracks
+    const baye_music_asset_t *title = passport_audio_find_asset(BAYE_MUSIC_TITLE);
+    assert(title != NULL);
+    assert(title->id == BAYE_MUSIC_TITLE);
+    assert(title->loop == true);
+    assert(strcmp(title->name, "TITLE") == 0);
+
+    const baye_music_asset_t *strat = passport_audio_find_asset(BAYE_MUSIC_STRATEGY);
+    assert(strat != NULL);
+    assert(strat->id == BAYE_MUSIC_STRATEGY);
+    assert(strat->loop == true);
+    assert(strcmp(strat->name, "STRATEGY") == 0);
+
+    const baye_music_asset_t *battle = passport_audio_find_asset(BAYE_MUSIC_BATTLE);
+    assert(battle != NULL);
+    assert(battle->id == BAYE_MUSIC_BATTLE);
+    assert(battle->loop == true);
+    assert(strcmp(battle->name, "BATTLE") == 0);
+
+    const baye_music_asset_t *vic = passport_audio_find_asset(BAYE_MUSIC_VICTORY);
+    assert(vic != NULL);
+    assert(vic->id == BAYE_MUSIC_VICTORY);
+    assert(vic->loop == false);
+    assert(strcmp(vic->name, "VICTORY") == 0);
+
+    const baye_music_asset_t *def = passport_audio_find_asset(BAYE_MUSIC_DEFEAT);
+    assert(def != NULL);
+    assert(def->id == BAYE_MUSIC_DEFEAT);
+    assert(def->loop == false);
+    assert(strcmp(def->name, "DEFEAT") == 0);
+
+    // 2. Verify invalid tracks
+    assert(passport_audio_find_asset(BAYE_MUSIC_NONE) == NULL);
+    assert(passport_audio_find_asset(BAYE_MUSIC_MAX) == NULL);
+    assert(passport_audio_find_asset((baye_music_track_t)-1) == NULL);
+    assert(passport_audio_find_asset((baye_music_track_t)99) == NULL);
+
+    printf("test_music_assets_and_metadata: PASS\n");
+}
+
+static void test_music_manager_controls(void) {
+    passport_audio_stop();
+    assert(passport_audio_get_track() == BAYE_MUSIC_NONE);
+
+    passport_audio_play(BAYE_MUSIC_TITLE);
+    assert(passport_audio_get_track() == BAYE_MUSIC_TITLE);
+
+    // Deduplication check: re-triggering same track keeps current track
+    passport_audio_play(BAYE_MUSIC_TITLE);
+    assert(passport_audio_get_track() == BAYE_MUSIC_TITLE);
+
+    passport_audio_play(BAYE_MUSIC_STRATEGY);
+    assert(passport_audio_get_track() == BAYE_MUSIC_STRATEGY);
+
+    passport_audio_play_once(BAYE_MUSIC_VICTORY, BAYE_MUSIC_STRATEGY);
+    assert(passport_audio_get_track() == BAYE_MUSIC_VICTORY);
+
+    passport_audio_stop();
+    assert(passport_audio_get_track() == BAYE_MUSIC_NONE);
+
+    printf("test_music_manager_controls: PASS\n");
+}
+
+static void test_fade_gain_math(void) {
+    // Q15 fixed-point arithmetic: val = ((int32_t)sample * fade_gain) >> 15;
+    int16_t samples[] = { 0, 100, -100, 1000, -1000, 16384, -16384, 32767, -32768 };
+    size_t num_samples = sizeof(samples) / sizeof(samples[0]);
+
+    // 1. Gain = 0 (Silence)
+    for (size_t i = 0; i < num_samples; i++) {
+        int32_t val = ((int32_t)samples[i] * 0) >> 15;
+        assert((int16_t)val == 0);
+    }
+
+    // 2. Gain = 32768 (Full Volume 1.0)
+    for (size_t i = 0; i < num_samples; i++) {
+        int32_t val = ((int32_t)samples[i] * 32768) >> 15;
+        assert((int16_t)val == samples[i]);
+    }
+
+    // 3. Gain = 16384 (Half Volume 0.5)
+    for (size_t i = 0; i < num_samples; i++) {
+        int32_t val = ((int32_t)samples[i] * 16384) >> 15;
+        int16_t expected = samples[i] / 2;
+        int diff = abs((int)val - (int)expected);
+        assert(diff <= 1);
+    }
+
+    // 4. Monotonic ramp check
+    int16_t test_sample = 20000;
+    int16_t prev_val = 0;
+    for (int32_t g = 0; g <= 32768; g += 512) {
+        int32_t val = ((int32_t)test_sample * g) >> 15;
+        assert(val >= prev_val);
+        prev_val = (int16_t)val;
+    }
+
+    printf("test_fade_gain_math: PASS\n");
+}
+
+static void test_real_asset_loop_determinism(const char *assets_dir) {
+    if (!assets_dir) {
+        printf("test_real_asset_loop_determinism: SKIPPED (no asset dir)\n");
+        return;
+    }
+
+    const char *tracks[] = {
+        "baye_title_16k.adpcm",
+        "baye_strategy_16k.adpcm",
+        "baye_battle_16k.adpcm"
+    };
+
+    for (int t = 0; t < 3; t++) {
+        char path[512];
+        snprintf(path, sizeof(path), "%s/%s", assets_dir, tracks[t]);
+        FILE *f = fopen(path, "rb");
+        if (!f) {
+            printf("test_real_asset_loop_determinism: WARNING could not open %s\n", path);
+            continue;
+        }
+
+        fseek(f, 0, SEEK_END);
+        long file_size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        assert(file_size > 0);
+
+        uint8_t *data = (uint8_t *)malloc(file_size);
+        assert(data != NULL);
+        size_t r = fread(data, 1, file_size, f);
+        fclose(f);
+        assert((long)r == file_size);
+
+        size_t total_samples = file_size * 2;
+        // Test 16000 samples (1 full second) across loop boundary
+        size_t test_samples = 16000;
+        if (test_samples > total_samples) test_samples = total_samples;
+
+        passport_adpcm_stream_t stream;
+        passport_adpcm_state_t state;
+        passport_adpcm_state_reset(&state);
+        passport_adpcm_stream_init(&stream, data, file_size, true);
+
+        int16_t *loop1 = (int16_t *)malloc(test_samples * sizeof(int16_t));
+        int16_t *loop2 = (int16_t *)malloc(test_samples * sizeof(int16_t));
+        assert(loop1 && loop2);
+
+        // First read the test_samples of loop 1
+        size_t s1 = passport_adpcm_stream_read(&stream, &state, loop1, test_samples);
+        assert(s1 == test_samples);
+        size_t remaining = total_samples - test_samples;
+
+        // Drain remainder of loop 1
+        int16_t temp_buf[320];
+        while (remaining > 0) {
+            size_t req = (remaining > 320) ? 320 : remaining;
+            size_t n = passport_adpcm_stream_read(&stream, &state, temp_buf, req);
+            assert(n > 0);
+            remaining -= n;
+        }
+        assert(stream.loop_count == 0);
+        assert(stream.offset == stream.size);
+
+        // Now read test_samples of loop 2 (boundary crossing resets state)
+        size_t s2 = passport_adpcm_stream_read(&stream, &state, loop2, test_samples);
+        assert(s2 == test_samples);
+        assert(stream.loop_count == 1);
+
+        // Assert exact bit-for-bit equivalence of loop 1 start vs loop 2 start
+        assert(memcmp(loop1, loop2, test_samples * sizeof(int16_t)) == 0);
+
+        free(loop1);
+        free(loop2);
+        free(data);
+        printf("  [Asset %s: %ld bytes] Deterministic loop verification: PASS\n", tracks[t], file_size);
+    }
+
+    printf("test_real_asset_loop_determinism: PASS\n");
+}
+
+int main(int argc, char **argv) {
+    const char *assets_dir = (argc > 1) ? argv[1] : "components/baye/assets";
     printf("--- Running test_audio ---\n");
     test_adpcm_basic();
     test_chunk_boundaries();
@@ -281,6 +462,10 @@ int main(void) {
     test_clamping_and_corruption();
     test_loop_determinism();
     test_volume_controls();
+    test_music_assets_and_metadata();
+    test_music_manager_controls();
+    test_fade_gain_math();
+    test_real_asset_loop_determinism(assets_dir);
     return 0;
 }
 

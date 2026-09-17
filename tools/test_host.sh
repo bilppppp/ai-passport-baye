@@ -58,6 +58,6 @@ clang -std=c11 -Wall -Wextra -Werror \
   "$PROJECT_DIR/components/baye/platform/passport_audio.c" \
   "$PROJECT_DIR/tests/test_audio.c" \
   -o "$BUILD_DIR/test_audio"
-"$BUILD_DIR/test_audio"
+"$BUILD_DIR/test_audio" "$PROJECT_DIR/components/baye/assets"
 
 echo "ALL HOST TESTS PASSED!"

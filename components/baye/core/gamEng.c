@@ -22,6 +22,7 @@
 #include "touch.h"
 #include "baye/bind-objects.h"
 #include "baye/script.h"
+#include "passport_audio.h"
 
 #define		IN_FILE	1	/* 当前文件位置 */
 
@@ -91,18 +92,23 @@ FAR void GamBaYeEng(void)
         return;
     }
     BAYE_LOG("baye_eng", "GamVarInit OK, entering GamMovie(MAIN_SPE)");
-    /* 显示游戏开始动画 */
+    /* 显示游戏开始动画及主菜单背景音乐 */
+    passport_audio_play(BAYE_MUSIC_TITLE);
     U8 mres = GamMovie(MAIN_SPE);
     BAYE_LOG("baye_eng", "GamMovie(MAIN_SPE) returned 0x%02X", (int)mres);
     
     do
     {
+        /* 确保主菜单期间保持播放TITLE音乐 (若已在播放则自动dedup为no-op) */
+        passport_audio_play(BAYE_MUSIC_TITLE);
         /* 获取游戏选项 */
         BAYE_LOG("baye_eng", "Calling GamMainChose()");
         if(!GamMainChose()) {
             BAYE_LOG("baye_eng", "GamMainChose returned false (exit)");
             break;
         }
+        /* 进入大地图策略模式，切换至STRATEGY背景音乐 */
+        passport_audio_play(BAYE_MUSIC_STRATEGY);
         BAYE_LOG("baye_eng", "Entering GameDevDrv()");
         GameDevDrv();	 	/* 游戏引擎入口程序 */
         BAYE_LOG("baye_eng", "Exited GameDevDrv()");

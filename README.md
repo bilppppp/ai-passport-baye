@@ -11,36 +11,38 @@
 | 项目 | 规格 / 测量基准 | 说明 |
 | :--- | :--- | :--- |
 | **主控芯片** | ESP32-C3 (QFN32, rev v1.1) | 160MHz 单核 RISC-V, 400KB SRAM |
-| **存储配置** | 8MB SPI Flash (XMC, DIO 80MHz) | Application 分区最大 3MB，当前占用 ~744 KB |
+| **存储配置** | 8MB SPI Flash (XMC, DIO 80MHz) | Application 分区最大 3MB，当前固件占用 ~1.89 MB (包含 1.1MB 完整 OST) |
 | **显示面板** | ST7789 320×240 SPI LCD | 160×96 1bpp 逻辑帧缓冲，2x 最近邻缩放到 320×192，上下 24px 留黑居中 |
-| **刷新性能** | 平均刷新耗时 **~31.5 ms** | 理论刷新率 **~31.8 fps**；单 10KB DMA Strip Buffer，零撕裂零重影 |
-| **按键系统** | 3 个物理按键 (UP, DOWN, OK) | 支持单击、长按（>500ms）、双击手势，完整映射方向/确认/返回/求助 |
+| **刷新性能** | 平均刷新耗时 **~33.9 ms** | 理论刷新率 **~29.5 fps**；单 10KB DMA Strip Buffer，零撕裂零重影 |
+| **按键系统** | 3 个物理按键 (UP, DOWN, OK) | 支持单击、长按（>500ms）、双击手势，完整映射方向/确认/返回/求助/音量 |
 | **战斗内存门禁** | 64 KiB 静态连续 SRAM | `g_FightMapData` 永久驻留，杜绝战役中内存碎片或分配失败 |
-| **运行栈配置** | 16,384 字节 (16 KiB) | 游戏主任务栈，硬件实测 HWM 剩余 **~14,372 字节**（实际峰值占用仅 ~2 KiB） |
-| **系统可用堆** | Free Heap: **~150 KB** | Min Free: **~150 KB**, 最大连续空闲块: **~114 KB**，游玩期间零内存泄漏 |
+| **运行栈配置** | 16,384 字节 (16 KiB) | 游戏主任务栈，硬件实测 HWM 剩余 **~14,348 字节**（实际峰值占用仅 ~2 KiB） |
+| **系统可用堆** | Free Heap: **~126 KB** | Min Free: **~126 KB**, 最大连续空闲块: **~57 KB**，游玩期间零内存泄漏 |
 | **存档持久化** | ESP-IDF NVS (`baye_sav`) | 支持 6 个独立存档槽位（`sango0`~`sango5`），断电/冷重启完全持久化 |
-| **电量显示 (Enhanced)** | CW2017 I2C 电量计 | 右上角物理留黑区常驻极轻量显示 `[电池] XX%`，30~60s 定时更新，零整屏重绘 |
-| **背景音乐 (Enhanced)** | ES8311 + I2S DMA 流式播放 | 16kHz Mono IMA ADPCM 复古战略进行曲，独立 2.5KB Worker 任务，无缝循环，与游戏及显示 DMA 零冲突 |
+| **常驻 HUD (Enhanced)** | CW2017 电量计 + 音量指示 | 顶部留黑区左侧显示 `VOL XX`、右侧显示 `[电池] XX%`，零整屏重绘 |
+| **完整原声配乐 (OST)** | ES8311 + I2S DMA 5曲场景联动 | 标题(Title)/大地图战略(Strategy)/战役(Battle)/胜利(Victory)/失败(Defeat)，独立 2.5KB Worker，平滑淡入淡出，零 Underrun |
 
-> **声明：** 背景音乐为 `Baye Passport Enhanced` 新增平台功能，非原版 Baye 音乐还原（原版为纯静音/蜂鸣器）。关闭 `CONFIG_BAYE_ENHANCED_MUSIC` 时完全保持原版行为与资源占用。
+> **声明：** 背景音乐为 `Baye Passport Enhanced` 原创场景配乐（OST），非原版游戏音乐还原。步步高平台本身具备声音与旋律能力，但在当前掌握的 Baye 源码中未发现背景音乐调用路径。关闭 `CONFIG_BAYE_ENHANCED_MUSIC` 时完全保持原版行为与资源占用。
 
 ---
 
 ## 物理按键与操作映射
 
-FoloToy AI Passport 配备 3 个物理按键，通过手势驱动《三国霸业》全功能操作：
+FoloToy AI Passport 配备 3 个物理按键，通过手势驱动《三国霸业》全功能操作与音量调节：
 
-| 物理按键 | 手势动作 | 映射键值 | 游戏内功能 |
+| 物理按键 | 手势动作 | 映射键值 / 功能 | 游戏内功能 |
 | :--- | :--- | :--- | :--- |
 | **UP** | 单击 (Click) | `CHAR_UP` (`0x22`) | 光标上移 / 菜单向上 |
 | **UP** | 长按 (Long >500ms) | `CHAR_LEFT` (`0x24`) | 光标左移 / 战役向左 / 上一页 |
+| **UP** | 双击 (Double) | 音量调节 +10% | 步进增加主音量（0..100%，NVS 自动持久化） |
 | **DOWN** | 单击 (Click) | `CHAR_DOWN` (`0x23`) | 光标下移 / 菜单向下 |
 | **DOWN** | 长按 (Long >500ms) | `CHAR_RIGHT` (`0x25`) | 光标右移 / 战役向右 / 下一页 |
+| **DOWN** | 双击 (Double) | 音量调节 -10% | 步进减小主音量（0..100%，0% 纯静音） |
 | **OK** | 单击 (Click) | `CHAR_ENTER` (`0x27`) | 确定 / 进入 / 下达指令 |
 | **OK** | 长按 (Long >500ms) | `CHAR_EXIT` (`0x28`) | 取消 / 返回 / 退出当前菜单 |
 | **OK** | 双击 (Double) | `CHAR_HELP` (`0x26`) | 帮助 / 查看城池与武将详情 |
 
-*注：在开发模式下，还支持通过 USB-Serial/JTAG 串口终端使用键盘控制（`w`/`s`/`a`/`d`/`Enter`/`Esc`，`m` 打印内存基线，`t` 切换复古墨绿/黑白对比度主题）。*
+*注：在开发模式下，还支持通过 USB-Serial/JTAG 串口终端使用键盘控制（`w`/`s`/`a`/`d`/`Enter`/`Esc`，`]` 音量+10%，`[` 音量-10%，`1`..`5` 试听配乐，`0` 静音，`m` 打印内存基线，`t` 切换复古墨绿/黑白对比度主题）。*
 
 ---
 
@@ -93,6 +95,7 @@ uv run --with pyserial python3 tools/test_serial_play.py /dev/cu.usbmodem101 --k
 ## 项目文档导航
 
 - [系统架构全景参考 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)
+- [背景音乐规范与原声集架构 (docs/MUSIC.md)](docs/MUSIC.md)
 - [硬件实测数据与基线报告 (docs/HARDWARE_VALIDATION.md)](docs/HARDWARE_VALIDATION.md)
 - [平台桩函数安全审计 (docs/platform-stub-audit.md)](docs/platform-stub-audit.md)
 - [音频子系统审计与未来演进 (docs/audio-audit.md)](docs/audio-audit.md)
