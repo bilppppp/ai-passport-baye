@@ -73,22 +73,31 @@ Instead of allocating a full $320 \times 240 \times 2 = 153,600$ byte frame buff
 ESP-IDF's `esp_lcd_panel_draw_bitmap()` initiates background SPI DMA transfer and returns immediately before transmission finishes. Re-using or modifying the source buffer while DMA is active causes pixel ghosting and visual artifacts.
 
 To enforce 100% memory safety:
-1. Every bitmap submission is routed through `draw_bitmap_and_wait()`:
+1. Every bitmap submission (Baye renderer strips, Battery HUD, and Volume HUD) is routed through the unified synchronous helper `passport_display_draw_bitmap_sync()`:
    ```c
-   static esp_err_t draw_bitmap_and_wait(esp_lcd_panel_handle_t panel,
-                                         int x_start, int y_start, int x_end, int y_end,
-                                         const void *color_data, int strip_id) {
+   esp_err_t passport_display_draw_bitmap_sync(int x_start, int y_start, int x_end, int y_end, const void *color_data) {
+       esp_lcd_panel_handle_t panel = bsp_display_panel();
+       if (!panel || !color_data) return ESP_ERR_INVALID_STATE;
+
        esp_err_t err = esp_lcd_panel_draw_bitmap(panel, x_start, y_start, x_end, y_end, color_data);
        if (err != ESP_OK) {
            s_lcd_submit_fail_count++;
-           ESP_LOGE(TAG, "Strip %d submit failed: %s", strip_id, esp_err_to_name(err));
+           ESP_LOGE(TAG, "draw_bitmap submit failed: %s", esp_err_to_name(err));
            return err;
        }
-       return wait_trans_done_fail_closed(strip_id);
+
+       err = bsp_display_wait_trans_done(100);
+       if (err != ESP_OK) {
+           s_dma_timeout_count++;
+           ESP_LOGE(TAG, "wait DMA timeout: %s; fail-closed waiting...", esp_err_to_name(err));
+           err = bsp_display_wait_trans_done(UINT32_MAX);
+           if (err != ESP_OK) return err;
+       }
+       return ESP_OK;
    }
    ```
-2. If `esp_lcd_panel_draw_bitmap` fails: flush is aborted fail-closed without waiting on an idle DMA channel.
-3. If `bsp_display_wait_trans_done(100)` times out: logs error, increments `s_dma_timeout_count`, and blocks indefinitely (`UINT32_MAX`) until hardware clears. The buffer is never modified concurrently.
+2. If `esp_lcd_panel_draw_bitmap` fails: flush is aborted fail-closed without waiting on an idle DMA channel, and submit failure counter increments.
+3. If `bsp_display_wait_trans_done(100)` times out: logs error, increments `s_dma_timeout_count`, and blocks indefinitely (`UINT32_MAX`) until hardware clears. The buffer is never modified concurrently. All callers (Baye strips, Battery widget, Volume widget) share this exact guarantee.
 
 **Performance on Real Hardware:**
 - Full flush duration: ~31.5 ms (theoretical ~31.8 fps).
@@ -172,8 +181,7 @@ The battery widget is anchored at the top-right corner of this letterbox:
 - **Geometry:** $X = 266 \dots 313$ (width 48 px), $Y = 7 \dots 16$ (height 10 px).
 - **Clearance:** $7\text{ px}$ from display top, $7\text{ px}$ above game area.
 - **Rendering:** Zero LVGL, zero full font engines. Minimal 5×7 numeric glyph bitmap table renders into a tiny 960-byte local buffer.
-- **Update Frequency:** Sampled from CW2017 via I2C every 30~60 seconds.
-- **LCD Pipeline Synchronization:** Transmitted via `draw_bitmap_and_wait()` inside the game thread's display pipeline, completely eliminating thread contention on the SPI bus.
+- **LCD Pipeline Synchronization:** Transmitted via `passport_display_draw_bitmap_sync()` inside the game thread's display pipeline, completely eliminating thread contention on the SPI bus.
 
 ---
 

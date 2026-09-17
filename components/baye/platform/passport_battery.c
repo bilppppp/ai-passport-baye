@@ -1,13 +1,12 @@
 #include "passport_battery.h"
+#include "passport_display.h"
 #include <string.h>
 #include <stdio.h>
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "esp_lcd_panel_ops.h"
 #include "bsp_battery.h"
-#include "bsp_display.h"
 
 static const char *TAG = "baye_batt";
 #define COLOR_BG 0x0000
@@ -132,22 +131,14 @@ esp_err_t passport_battery_init(void) {
 }
 
 static void update_widget_on_lcd(int soc) {
-    esp_lcd_panel_handle_t panel = bsp_display_panel();
-    if (!panel) return;
-
     passport_battery_render_bitmap(soc, s_widget_buf, BATTERY_W, BATTERY_H);
-
-    esp_err_t err = esp_lcd_panel_draw_bitmap(
-        panel,
+    passport_display_draw_bitmap_sync(
         BATTERY_POS_X,
         BATTERY_POS_Y,
         BATTERY_POS_X + BATTERY_W,
         BATTERY_POS_Y + BATTERY_H,
         s_widget_buf
     );
-    if (err == ESP_OK) {
-        bsp_display_wait_trans_done(100);
-    }
 }
 
 void passport_battery_force_refresh(void) {

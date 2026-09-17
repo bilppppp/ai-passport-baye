@@ -79,8 +79,7 @@ uint8_t passport_audio_get_volume(void) {
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "bsp_audio.h"
-#include "bsp_display.h"
-#include "esp_lcd_panel_ops.h"
+#include "passport_display.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "passport_gui.h"
@@ -112,35 +111,21 @@ static void passport_audio_persist_volume(uint8_t volume) {
     esp_err_t err = nvs_open("baye_cfg", NVS_READWRITE, &handle);
     if (err == ESP_OK) {
         err = nvs_set_u8(handle, "volume", volume);
-        if (err == ESP_ERR_NVS_NOT_ENOUGH_SPACE) {
-            ESP_LOGW(TAG, "NVS full, purging obsolete factory test namespaces to reclaim entries...");
-            nvs_handle_t h;
-            if (nvs_open("signal_dex", NVS_READWRITE, &h) == ESP_OK) {
-                nvs_erase_all(h);
-                nvs_commit(h);
-                nvs_close(h);
-            }
-            if (nvs_open("misc", NVS_READWRITE, &h) == ESP_OK) {
-                nvs_erase_all(h);
-                nvs_commit(h);
-                nvs_close(h);
-            }
-            if (nvs_open("nvs.net80211", NVS_READWRITE, &h) == ESP_OK) {
-                nvs_erase_all(h);
-                nvs_commit(h);
-                nvs_close(h);
-            }
-            err = nvs_set_u8(handle, "volume", volume);
-        }
         if (err == ESP_OK) {
-            nvs_commit(handle);
-            ESP_LOGI(TAG, "Persisted volume %u%% to NVS (namespace: baye_cfg, key: volume)", (unsigned)volume);
+            err = nvs_commit(handle);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "Persisted volume %u%% to NVS (namespace: baye_cfg, key: volume)", (unsigned)volume);
+            } else {
+                ESP_LOGW(TAG, "Failed to commit volume to NVS: %s", esp_err_to_name(err));
+            }
         } else {
-            ESP_LOGE(TAG, "Failed to write volume to NVS: %s", esp_err_to_name(err));
+            ESP_LOGW(TAG, "Failed to write volume to NVS: %s (in-memory volume %u%% active)",
+                     esp_err_to_name(err), (unsigned)volume);
         }
         nvs_close(handle);
     } else {
-        ESP_LOGE(TAG, "Failed to open NVS baye_cfg for writing: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "Failed to open NVS baye_cfg for writing: %s (in-memory volume %u%% active)",
+                 esp_err_to_name(err), (unsigned)volume);
     }
 }
 
@@ -165,22 +150,14 @@ static uint8_t passport_audio_load_persisted_volume(void) {
 }
 
 static void update_volume_widget_on_lcd(int vol) {
-    esp_lcd_panel_handle_t panel = bsp_display_panel();
-    if (!panel) return;
-
     passport_volume_render_bitmap(vol, s_vol_widget_buf, VOLUME_W, VOLUME_H);
-
-    esp_err_t err = esp_lcd_panel_draw_bitmap(
-        panel,
+    passport_display_draw_bitmap_sync(
         VOLUME_POS_X,
         VOLUME_POS_Y,
         VOLUME_POS_X + VOLUME_W,
         VOLUME_POS_Y + VOLUME_H,
         s_vol_widget_buf
     );
-    if (err == ESP_OK) {
-        bsp_display_wait_trans_done(100);
-    }
 }
 
 void passport_audio_hud_force_refresh(void) {
@@ -250,9 +227,9 @@ esp_err_t passport_audio_init(void) {
 
     // 1. Ensure NVS flash is initialized for persistent configuration
     esp_err_t nvs_err = nvs_flash_init();
-    if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        nvs_flash_erase();
-        nvs_flash_init();
+    if (nvs_err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_flash_init returned %s; continuing without persistent config",
+                 esp_err_to_name(nvs_err));
     }
 
     // 2. Initialize Codec & I2S hardware

@@ -256,6 +256,20 @@ static void test_volume_controls(void) {
     passport_audio_adjust_volume(-10); // Still 0
     assert(passport_audio_get_volume() == 0);
 
+    // Full discrete 0..100 sweep validation
+    for (int v = 0; v <= 100; v += 10) {
+        passport_audio_set_volume((uint8_t)v);
+        assert(passport_audio_get_volume() == (uint8_t)v);
+        char expected[16];
+        snprintf(expected, sizeof(expected), "VOL %d", v);
+        len = passport_volume_format_text(v, buf, sizeof(buf));
+        assert(len > 0);
+        assert(strcmp(buf, expected) == 0);
+        // Verify HUD refresh calls without errors
+        passport_audio_hud_force_refresh();
+        passport_audio_hud_tick();
+    }
+
     printf("test_volume_controls: PASS\n");
 }
 

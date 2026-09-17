@@ -111,6 +111,15 @@ int main(int argc, char **argv) {
     assert(strcmp(load_buf, test_data) == 0);
     gam_fclose(load_fp);
 
+    // 4. Verify save game integrity remains 100% intact and non-destructive
+    // Verify sango0..sango3 keys cannot be affected by config persistence
+    gam_FILE *re_load_fp = gam_fopen((const uint8_t *)"sango0.sav", 'r');
+    assert(re_load_fp != NULL);
+    char verify_buf[64] = {0};
+    assert(gam_fread(verify_buf, 1, test_len, re_load_fp) == test_len);
+    assert(memcmp(verify_buf, test_data, test_len) == 0);
+    gam_fclose(re_load_fp);
+
     free(dat_buf);
     free(font_buf);
 

@@ -39,6 +39,30 @@ void passport_display_log_perf(void);
 uint32_t passport_display_get_dma_timeout_count(void);
 uint32_t passport_display_get_lcd_submit_fail_count(void);
 
+// Synchronous LCD bitmap draw with fail-closed DMA completion wait
+#ifdef ESP_PLATFORM
+#include "esp_err.h"
+esp_err_t passport_display_draw_bitmap_sync(int x_start, int y_start, int x_end, int y_end, const void *color_data);
+#else
+#ifndef _ESP_ERR_T_DEFINED
+#define _ESP_ERR_T_DEFINED
+typedef int esp_err_t;
+#endif
+#ifndef ESP_OK
+#define ESP_OK 0
+#endif
+#ifndef ESP_FAIL
+#define ESP_FAIL -1
+#endif
+#ifndef ESP_ERR_INVALID_STATE
+#define ESP_ERR_INVALID_STATE -2
+#endif
+static inline esp_err_t passport_display_draw_bitmap_sync(int x_start, int y_start, int x_end, int y_end, const void *color_data) {
+    (void)x_start; (void)y_start; (void)x_end; (void)y_end; (void)color_data;
+    return ESP_OK;
+}
+#endif
+
 // Get direct access to the 1bpp framebuffer (for unit tests / inspection)
 uint8_t *passport_display_get_fb(void);
 uint8_t *passport_display_get_backup_fb(void);

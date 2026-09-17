@@ -22,32 +22,32 @@ static int64_t  s_max_full_flush_us = 0;
 static uint32_t s_dma_timeout_count = 0;
 static uint32_t s_lcd_submit_fail_count = 0;
 
-static esp_err_t wait_trans_done_fail_closed(int strip_id) {
-    esp_err_t err = bsp_display_wait_trans_done(100);
+esp_err_t passport_display_draw_bitmap_sync(int x_start, int y_start, int x_end, int y_end, const void *color_data) {
+    esp_lcd_panel_handle_t panel = bsp_display_panel();
+    if (!panel || !color_data) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = esp_lcd_panel_draw_bitmap(panel, x_start, y_start, x_end, y_end, color_data);
+    if (err != ESP_OK) {
+        s_lcd_submit_fail_count++;
+        ESP_LOGE(TAG, "draw_bitmap submit failed (total failures: %u, x=[%d..%d], y=[%d..%d]): %s",
+                 (unsigned)s_lcd_submit_fail_count, x_start, x_end, y_start, y_end, esp_err_to_name(err));
+        return err;
+    }
+
+    err = bsp_display_wait_trans_done(100);
     if (err != ESP_OK) {
         s_dma_timeout_count++;
-        ESP_LOGE(TAG, "Strip %d wait DMA timeout (total timeouts: %u): %s; fail-closed waiting indefinitely...",
-                 strip_id, (unsigned)s_dma_timeout_count, esp_err_to_name(err));
+        ESP_LOGE(TAG, "wait DMA timeout (total timeouts: %u, x=[%d..%d], y=[%d..%d]): %s; fail-closed waiting indefinitely...",
+                 (unsigned)s_dma_timeout_count, x_start, x_end, y_start, y_end, esp_err_to_name(err));
         err = bsp_display_wait_trans_done(UINT32_MAX);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Strip %d fatal DMA wait failure: %s", strip_id, esp_err_to_name(err));
+            ESP_LOGE(TAG, "fatal DMA wait failure: %s", esp_err_to_name(err));
             return err;
         }
     }
     return ESP_OK;
-}
-
-static esp_err_t draw_bitmap_and_wait(esp_lcd_panel_handle_t panel,
-                                      int x_start, int y_start, int x_end, int y_end,
-                                      const void *color_data, int strip_id) {
-    esp_err_t err = esp_lcd_panel_draw_bitmap(panel, x_start, y_start, x_end, y_end, color_data);
-    if (err != ESP_OK) {
-        s_lcd_submit_fail_count++;
-        ESP_LOGE(TAG, "Strip %d draw_bitmap submit failed (total failures: %u): %s",
-                 strip_id, (unsigned)s_lcd_submit_fail_count, esp_err_to_name(err));
-        return err;
-    }
-    return wait_trans_done_fail_closed(strip_id);
 }
 #else
 #define ESP_LOGI(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
@@ -148,20 +148,19 @@ void passport_display_init(void) {
         }
     }
 
-    esp_lcd_panel_handle_t panel = bsp_display_panel();
-    if (panel && s_strip_buf) {
+    if (s_strip_buf) {
         // Clear top and bottom letterbox bars (black)
         uint16_t black_color = TO_LCD_COLOR(0x0000);
         for (size_t i = 0; i < STRIP_PIXELS; i++) {
             s_strip_buf[i] = black_color;
         }
         // Top border: y = 0..23 (24 rows = 16 rows + 8 rows)
-        draw_bitmap_and_wait(panel, 0, 0, PASSPORT_PHYS_W, 16, s_strip_buf, -1);
-        draw_bitmap_and_wait(panel, 0, 16, PASSPORT_PHYS_W, 24, s_strip_buf, -2);
+        passport_display_draw_bitmap_sync(0, 0, PASSPORT_PHYS_W, 16, s_strip_buf);
+        passport_display_draw_bitmap_sync(0, 16, PASSPORT_PHYS_W, 24, s_strip_buf);
 
         // Bottom border: y = 216..239 (24 rows)
-        draw_bitmap_and_wait(panel, 0, 216, PASSPORT_PHYS_W, 232, s_strip_buf, -3);
-        draw_bitmap_and_wait(panel, 0, 232, PASSPORT_PHYS_W, 240, s_strip_buf, -4);
+        passport_display_draw_bitmap_sync(0, 216, PASSPORT_PHYS_W, 232, s_strip_buf);
+        passport_display_draw_bitmap_sync(0, 232, PASSPORT_PHYS_W, 240, s_strip_buf);
 
         // Initialize and paint persistent battery widget in top-right letterbox
         passport_battery_init();
@@ -228,7 +227,7 @@ void passport_display_flush(void) {
 
         int py_start = BAYE_OFFSET_Y + ly_start * BAYE_SCALE;
         int py_end   = py_start + logical_rows_in_strip * BAYE_SCALE;
-        esp_err_t draw_err = draw_bitmap_and_wait(panel, 0, py_start, PASSPORT_PHYS_W, py_end, s_strip_buf, strip);
+        esp_err_t draw_err = passport_display_draw_bitmap_sync(0, py_start, PASSPORT_PHYS_W, py_end, s_strip_buf);
         if (draw_err != ESP_OK) {
             // Unrecoverable LCD submit or DMA failure; abort flush to preserve buffer integrity
             s_dirty = false;

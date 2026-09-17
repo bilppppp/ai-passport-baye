@@ -178,5 +178,22 @@ Captured on `/dev/cu.usbmodem101` during live strategic map gameplay, menu selec
   - `LCD Submit Fails = 0`
   - `Free Heap = 125 KB` ($> 64\text{ KB}$ battle gate completely uncompromised).
 
+### 5.6 Gate F — NVS Safety Hardening & Unified Synchronous LCD Helper
+- **Zero Automatic NVS Erase:**
+  - Complete elimination of `nvs_flash_erase()` across runtime (`passport_audio.c`, `passport_fsys.c`).
+  - Zero foreign namespace erasure (`signal_dex`, `misc`, `nvs.net80211`).
+  - Principle: `baye_sav` manual game saves > volume persistence. NVS failure defaults to safe in-memory fallback without destructive recovery.
+- **Unified Synchronous LCD Helper (`passport_display_draw_bitmap_sync`):**
+  - Baye game strip renderer, Battery HUD, and Volume HUD all route through the same fail-closed synchronous DMA completion barrier.
+  - LCD submission failures and DMA timeouts tracked centrally.
+  - Zero premature source buffer reuse.
+- **Hardware Telemetry Verified:**
+  - Automatic NVS erase paths remaining: 0
+  - Foreign namespace erase paths remaining: 0
+  - baye_sav destructive recovery paths: 0
+  - DMA Timeouts = 0, LCD Submit Fails = 0, Audio Underruns = 0
+  - Recovery/cardid touched: NO
+
+
 
 

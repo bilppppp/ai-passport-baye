@@ -57,11 +57,6 @@ void passport_fsys_init(void) {
     }
 
     esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGW(TAG, "NVS partition needs erase, initializing fresh");
-        nvs_flash_erase();
-        err = nvs_flash_init();
-    }
     if (err == ESP_OK) {
         err = nvs_open("baye_sav", NVS_READWRITE, &s_nvs_save);
         if (err == ESP_OK) {
